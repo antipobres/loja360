@@ -1,0 +1,181 @@
+name: Conversa sobre ideias do dashboard
+
+on:
+  issues:
+    types: [opened]
+  issue_comment:
+    types: [created]
+
+permissions:
+  issues: write
+
+jobs:
+  responder:
+    if: >-
+      ${{ !github.event.repository.fork && !github.event.issue.pull_request &&
+      github.event.sender.type == 'User' && startsWith(github.event.issue.title, '[Ideia] ') &&
+      (github.event_name == 'issues' && contains(github.event.issue.body, '<!-- dash:chat -->') ||
+       github.event_name == 'issue_comment' && contains(github.event.comment.body, '<!-- dash:chat -->')) &&
+      (github.event.sender.login == github.repository_owner ||
+       (github.event_name == 'issues' &&
+        contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.issue.author_association)) ||
+       (github.event_name == 'issue_comment' &&
+        contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association))) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    concurrency:
+      group: dash-ideas-${{ github.event.issue.number }}
+      queue: max
+    steps:
+      - name: Responder no tópico
+        shell: node {0}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          # Repositório > Settings > Secrets and variables > Actions > Variables.
+          OPENAI_MODEL: ${{ vars.OPENAI_MODEL || 'gpt-4.1-mini' }}
+        run: |
+          const { readFileSync } = require('node:fs');
+          const env = process.env;
+          const event = JSON.parse(readFileSync(env.GITHUB_EVENT_PATH, 'utf8'));
+          const tag = '[Ideia] ';
+          const requestMark = '<!-- dash:chat -->';
+          const endMark = '<!-- /dash:assistant -->';
+          const noKeyMark = '<!-- dash:status:no-key -->';
+          const trustedRoles = new Set(['OWNER', 'MEMBER', 'COLLABORATOR']);
+
+          async function api(service, url, token, data) {
+            const response = await fetch(url, {
+              method: data === undefined ? 'GET' : 'POST',
+              headers: {
+                Authorization: 'Bearer ' + token,
+                Accept: 'application/json',
+                'Content-Type': 'application/json',
+                ...(service === 'GitHub' && { 'X-GitHub-Api-Version': '2022-11-28' }),
+              },
+              body: data === undefined ? undefined : JSON.stringify(data),
+              redirect: 'error',
+              signal: AbortSignal.timeout(90000),
+            });
+            if (!response.ok) {
+              const error = new Error(service + ' HTTP ' + response.status);
+              error.status = response.status;
+              throw error;
+            }
+            return response.json();
+          }
+
+          function requestText(body) {
+            const lines = (body || '').split(/\r?\n/);
+            if (!lines.some(line => line.trim() === requestMark)) return '';
+            return lines.filter(line => line.trim() !== requestMark).join('\n').trim();
+          }
+
+          async function run() {
+            const { issue, repository, sender } = event;
+            const opening = env.GITHUB_EVENT_NAME === 'issues' && event.action === 'opened';
+            const followup = env.GITHUB_EVENT_NAME === 'issue_comment' && event.action === 'created';
+            if ((!opening && !followup) || repository.fork || repository.full_name !== env.GITHUB_REPOSITORY ||
+                issue.pull_request || !issue.title.startsWith(tag) || sender.type !== 'User') return;
+
+            const turn = opening ? issue : event.comment;
+            const question = requestText(turn.body);
+            if (!question || turn.user.id !== sender.id) return;
+            const base = 'https://api.github.com/repos/' + env.GITHUB_REPOSITORY;
+            const gh = (path, data) => api('GitHub', base + path, env.GH_TOKEN, data);
+            const rights = new Map();
+            async function writer(item) {
+              const user = item.user;
+              if (user?.type !== 'User') return false;
+              if (user.id === repository.owner.id) return true;
+              if (!trustedRoles.has(item.author_association)) return false;
+              if (!rights.has(user.id)) {
+                try {
+                  const result = await gh('/collaborators/' + encodeURIComponent(user.login) + '/permission');
+                  rights.set(user.id, ['write', 'admin'].includes(result.permission));
+                } catch (error) {
+                  if (error.status !== 404) throw error;
+                  rights.set(user.id, false);
+                }
+              }
+              return rights.get(user.id);
+            }
+            if (!await writer(turn) || !await writer(issue)) return;
+
+            const key = (opening ? 'issue-' : 'comment-') + turn.id;
+            const replyMark = '<!-- dash:assistant:' + key + ' -->';
+            const errorMark = '<!-- dash:status:error-' + key + ' -->';
+            const thread = '/issues/' + issue.number + '/comments';
+            const post = body => gh(thread, { body });
+            const recent = [];
+            let sawNoKey = false;
+            let sawError = false;
+            // A paginação cobre marcadores antigos. Só oito mensagens anteriores entram no contexto.
+            for (let page = 1; ; page++) {
+              const comments = await gh(thread + '?per_page=100&page=' + page);
+              for (const comment of comments) {
+                const body = comment.body || '';
+                const bot = comment.user?.type === 'Bot' && comment.user.login === 'github-actions[bot]';
+                const first = body.split('\n', 1)[0].trim();
+                if (bot && first === replyMark) return;
+                if (bot && first === noKeyMark) sawNoKey = true;
+                if (bot && first === errorMark) sawError = true;
+                if (opening || !env.OPENAI_API_KEY) continue;
+                let text;
+                if (bot && body.trimEnd().endsWith(endMark)) {
+                  const reply = /^<!-- dash:assistant:(issue|comment)-(\d+) -->$/.exec(first);
+                  if (reply && (reply[1] === 'issue' || Number(reply[2]) < turn.id)) {
+                    text = body.slice(body.indexOf('\n') + 1, body.lastIndexOf(endMark)).trim();
+                  }
+                } else if (comment.id < turn.id && comment.user?.type === 'User' &&
+                           (comment.user.id === repository.owner.id || trustedRoles.has(comment.author_association))) {
+                  text = requestText(body);
+                }
+                if (text) {
+                  recent.push({ comment, bot, text: text.slice(0, 1800) });
+                  if (recent.length > 8) recent.shift();
+                }
+              }
+              if (comments.length < 100) break;
+            }
+
+            if (!env.OPENAI_API_KEY) {
+              if (!sawNoKey) await post(noKeyMark + '\nA ideia está guardada neste tópico. Para conversar com a IA, configure o segredo OPENAI_API_KEY nas configurações de Actions do repositório e envie uma nova mensagem.');
+              return;
+            }
+            const messages = [];
+            for (const { comment, bot, text } of recent) {
+              if (bot || await writer(comment)) messages.push({ role: bot ? 'assistant' : 'user', content: text });
+            }
+            const title = issue.title.slice(tag.length).trim();
+            if (!opening) {
+              const idea = (issue.body || '').replaceAll(requestMark, '').trim().slice(0, 4000);
+              messages.unshift({ role: 'user', content: 'Ideia: ' + title + '\n' + idea });
+            }
+            messages.push({ role: 'user', content: (opening ? title + '\n' : '') + question.slice(0, 6000) });
+            let answer;
+            try {
+              const result = await api('OpenAI', 'https://api.openai.com/v1/responses', env.OPENAI_API_KEY, {
+                model: env.OPENAI_MODEL || 'gpt-4.1-mini',
+                store: false,
+                max_output_tokens: 1200,
+                instructions: 'Converse em português sobre ideias para o dashboard de Xbox 360. Use o histórico como contexto da conversa. Sugira melhorias concretas e esclareça dúvidas. Responda apenas com texto. Não execute comandos, não anuncie alterações como realizadas e não peça credenciais.',
+                input: messages,
+              });
+              answer = (result.output || []).filter(item => item.type === 'message').flatMap(item =>
+                (item.content || []).filter(part => part.type === 'output_text' || part.type === 'refusal')
+                  .map(part => part.text || part.refusal || '')
+              ).join('\n').trim();
+              if (!answer) throw new Error('Resposta sem texto.');
+            } catch (error) {
+              if (!sawError) await post(errorMark + '\nA ideia está guardada. A IA não conseguiu responder. Confira a configuração de Actions e o acesso ao modelo, depois tente novamente.');
+              throw error;
+            }
+            // O texto não pode introduzir marcadores de controle do painel.
+            await post(replyMark + '\n\n' + answer.replaceAll('<!--', '‹!--') + '\n\n' + endMark);
+          }
+          run().catch(error => {
+            // Nunca grave corpos, cabeçalhos, credenciais ou a mensagem original do erro no log.
+            console.error('Falha ao processar o tópico.' + (Number.isInteger(error.status) ? ' HTTP ' + error.status : ''));
+            process.exitCode = 1;
+          });

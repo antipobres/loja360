@@ -1,0 +1,6 @@
+{
+  "version": "1.0.1",
+  "packageUrl": "https://seu-dominio.example/releases/Dashboard-Windows.zip",
+  "sha256": "COLE_AQUI_O_SHA256_DO_ZIP",
+  "notes": "Atualizacao da dashboard"
+}

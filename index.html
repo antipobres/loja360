@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#171b18"><title>Loja • Xbox 360</title>
+  <link rel="stylesheet" href="./studio.css">
+</head>
+<body>
+<aside class="rail">
+  <a class="brand" href="#inicio" aria-label="Cards Studio, início"><i class="mark" aria-hidden="true"></i><span>Loja<span class="light">360</span></span></a>
+  <p class="kicker rail-label">Publicação</p>
+  <nav aria-label="Navegação principal">
+    <a href="#inicio"><i class="ico tiles"></i>Visão geral</a><a href="#biblioteca"><i class="ico covers"></i>Biblioteca</a>
+    <a href="#catalogo"><i class="ico upload"></i>Upload</a><a href="#updates"><i class="ico tiles"></i>Atualizações</a><a href="#ideias"><i class="ico bubble"></i>Ideias e chat</a>
+  </nav>
+  <div class="rail-bottom"><span class="console-mark" aria-hidden="true">◉</span><div><strong>Xbox 360</strong><small>Dashboard Cards</small></div></div>
+</aside>
+<main>
+  <header class="top"><div class="crumb">Workspace <span>/</span> <b id="crumb">Visão geral</b></div><button class="outline connectBtn" type="button"><span class="dot"></span><span class="connection-label">Conectar GitHub</span></button></header>
+  <div id="feedback" role="status" aria-live="polite" hidden></div>
+  <section id="inicio" class="view">
+    <div class="hero"><div class="hero-text"><p class="kicker"><i></i> Dashboard Cards</p><h1>Central de<br>publicação<span>.</span></h1>
+    <p>Gerencie a loja, as versões da dash e as ideias para o seu Xbox 360.</p>
+    <button class="primary" data-game><b aria-hidden="true">＋</b> Publicar jogo</button></div></div>
+    <div class="metrics">
+      <a href="#catalogo"><span class="metric-icon"><i class="ico covers"></i></span><div><small>Jogos no catálogo</small><strong id="game-count">—</strong></div></a>
+      <a href="#updates"><span class="metric-icon"><i class="ico upload"></i></span><div><small>Build publicada</small><strong id="build-number">—</strong></div></a>
+      <a href="#conexao"><span class="metric-icon"><i class="ico link"></i></span><div><small>Fonte do Xbox</small><strong class="metric-word" id="source-state">Configurar</strong></div></a>
+    </div>
+    <div class="section-head"><div><p class="kicker">Biblioteca</p><h2>Catálogo da loja</h2></div><a class="textlink" href="#catalogo">Ver catálogo</a></div>
+    <div id="recent"></div>
+  </section>
+  <section id="biblioteca" class="view" hidden>
+    <div class="page-title"><div><p class="kicker">Loja do Xbox 360</p><h1>Biblioteca</h1></div><button class="primary" data-game>＋ Publicar jogo</button></div>
+    <p class="hint">Todos os jogos publicados no site aparecem aqui e na dashboard quando o feed do GitHub Pages atualizar.</p>
+    <div id="library-list"></div>
+  </section>
+  <section id="catalogo" class="view" hidden>
+    <div class="page-title"><div><p class="kicker">Loja do Xbox 360</p><h1>Upload</h1></div><button class="primary" data-game>＋ Publicar jogo</button></div>
+    <label class="search"><span aria-hidden="true">⌕</span><input id="query" type="search" placeholder="Pesquisar título ou gênero" aria-label="Pesquisar título ou gênero"></label>
+    <div id="catalog-list"></div>
+  </section>
+  <section id="updates" class="view" hidden>
+    <div class="page-title"><div><p class="kicker">Software do console</p><h1>Atualizações</h1></div><button class="primary" id="open-update">＋ Publicar build</button></div>
+    <div class="pane"><p class="kicker">Canal estável</p><h2 id="release-title">Sem build publicada</h2><p id="release-notes"></p><dl class="metadata" id="release-meta"></dl></div>
+    <p class="hint">Publique o arquivo cards-base.xex com o mesmo número de build usado na compilação. A dash consulta este canal enquanto está aberta.</p>
+  </section>
+  <section id="ideias" class="view" hidden>
+    <div class="page-title"><div><p class="kicker">Desenvolvimento</p><h1>Ideias e chat</h1></div><button class="primary" id="new-idea">＋ Nova ideia</button></div>
+    <p class="hint">As conversas ficam nas Issues do repositório. As respostas da IA usam o GitHub Actions e a chave OpenAI configurada pelo responsável.</p>
+    <div class="discussion"><div class="pane"><h2>Conversas</h2><div id="idea-list"></div></div><div class="pane" id="thread"><h2>Selecione uma ideia</h2></div></div>
+  </section>
+  <section id="conexao" class="view" hidden>
+    <div class="page-title"><div><p class="kicker">Integração</p><h1>Conexão</h1></div></div>
+    <form class="pane stack" id="settings-form"><h2>Repositório no GitHub</h2>
+    <p class="hint">Use um repositório público com GitHub Pages. O Xbox lê o catálogo mesmo com seu PC desligado.</p>
+    <div class="pair"><label>Conta ou organização<input name="owner" required autocomplete="off" placeholder="seu-usuario"></label><label>Repositório<input name="repo" required placeholder="cards-studio"></label></div>
+    <div class="pair"><label>Branch publicada<input name="branch" required value="main"></label><label>Pasta no repositório<input name="prefix" placeholder="Deixe vazia para a raiz"></label></div>
+    <label>Endereço público da pasta no Pages<input type="url" name="baseUrl" placeholder="https://seu-usuario.github.io/cards-studio/"></label>
+    <label>Token de publicação do GitHub <small>Opcional para ler o catálogo</small><input name="token" type="password" autocomplete="off" spellcheck="false" placeholder="Token de acesso com escopo neste repositório"></label>
+    <p class="hint">Use um token fine-grained com escrita em Contents e Issues. A credencial fica em memória até você sair ou fechar a página.</p>
+    <div class="actions"><button class="primary" type="submit">Salvar conexão</button><button class="outline" type="button" id="disconnect">Desconectar conta</button></div></form>
+    <div class="pane setup"><h2>Conectar a dashboard</h2><p>Gere o arquivo e copie para <code>assets/store-site.ini</code> da dash no Xbox. Depois, jogos e builds vêm do site.</p><button class="outline" id="download-config">Baixar store-site.ini</button></div>
+  </section>
+  <footer><span>Cards Studio</span><span>Xbox 360 • Publicação</span></footer>
+</main>
+<dialog id="publish-dialog" aria-labelledby="publish-title"><form class="stack" id="publish-form">
+  <button type="button" class="close" data-close aria-label="Fechar">×</button><p class="kicker" id="publish-type"></p><h2 id="publish-title">Publicar jogo</h2>
+  <div id="game-fields" class="stack"><label>Título<input name="title" maxlength="80" required></label><div class="pair"><label>Identificador<input name="slug" maxlength="40" pattern="[a-z0-9-]+" required></label><label>Gênero<input name="genre" maxlength="48" required></label></div><label>Descrição<textarea name="description" rows="2" maxlength="320" required></textarea></label><label>Capa opcional • PNG ou JPG<input type="file" accept="image/png,image/jpeg" name="coverFile"></label></div>
+  <div id="update-fields" class="stack" hidden><label>Número da build<input name="build" type="number" min="1" max="2147483647"></label><label>Notas da versão<textarea name="notes" rows="2" maxlength="320"></textarea></label></div>
+  <label>Origem do arquivo<select name="source"><option value="file">Arquivo do computador • até 20 MiB</option><option value="release">Arquivo de uma Release do GitHub</option></select></label>
+  <label id="file-source"><span id="file-label">Executável de jogo autocontido (.xex)</span><input name="file" type="file" accept=".xex"></label>
+  <div class="stack" id="release-source" hidden><label>Arquivo da Release<select name="assetId"><option value="">Selecione um arquivo</option></select></label><div class="actions"><button class="outline" type="button" id="reload-assets">Atualizar arquivos</button><a id="release-link" target="_blank" rel="noopener noreferrer">Abrir Releases no GitHub</a></div></div>
+  <p role="status" class="hint" id="publish-result"></p><button class="primary" type="submit" id="publish-submit">Publicar no catálogo</button>
+</form></dialog>
+<dialog id="idea-dialog" aria-labelledby="idea-title"><form class="stack" id="idea-form"><button type="button" class="close" data-close aria-label="Fechar">×</button><p class="kicker">GitHub Issues</p><h2 id="idea-title">Nova ideia</h2><label>Título<input name="title" maxlength="120" required></label><label>Ideia ou pergunta<textarea name="body" rows="5" maxlength="4000" required></textarea></label><label class="check"><input type="checkbox" name="chat" checked> Pedir uma resposta da IA</label><p class="hint">O texto será publicado no repositório público.</p><p class="hint" id="idea-result" role="status"></p><button class="primary">Publicar ideia</button></form></dialog>
+<noscript>Ative o JavaScript para usar o painel de publicação.</noscript><script type="module" src="./studio.mjs"></script>
+</body></html>
