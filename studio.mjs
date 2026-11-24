@@ -160,15 +160,21 @@ function openPublish(kind,game=null){
   if(!isGame)publish.elements.build.value=Math.max(2,(feed.update?.build||1)+1)
   $('#publish-title').textContent=isGame?(editing?'Editar jogo':'Publicar jogo'):'Publicar atualização'
   $('#publish-type').textContent=isGame?'Catálogo do Xbox':'Software da dashboard'
-  $('#file-label').textContent=isGame?(editing?'Novo XEX • deixe vazio para manter o atual':'Executável autocontido (.xex)'):'Executável da dashboard (cards-base.xex)'
+  $('#file-label').textContent=isGame?(editing?'Novo pacote (.xex/.zip) • deixe vazio para manter o atual':'Pacote do jogo (.xex ou .zip)'):'Pacote da dashboard (.zip com todos os arquivos, ou .xex)'
+  const fl=$('#folder-label'); if(fl) fl.textContent=isGame?'Pasta do jogo (será empacotada em .zip)':'Pasta completa da dash (será empacotada em .zip)'
   $('#publish-submit').textContent=isGame?'Publicar no catálogo':'Publicar atualização automática'
   $('#release-link').href='https://github.com/'+config.owner+'/'+config.repo+'/releases'
   $('#publish-result').textContent='';toggleSource(false);$('#publish-dialog').showModal()
 }
 function toggleSource(fetchAssets=true){
-  const release=publish.elements.source.value==='release'
-  $('#release-source').hidden=!release;$('#file-source').hidden=release
-  publish.elements.file.required=!release&&!editing;publish.elements.assetId.required=release
+  const src=publish.elements.source.value
+  const release=src==='release', folder=src==='folder', file=src==='file'
+  $('#release-source').hidden=!release
+  $('#file-source').hidden=!file
+  const fs=$('#folder-source'); if(fs) fs.hidden=!folder
+  publish.elements.file.required=file&&!editing
+  if(publish.elements.folder) publish.elements.folder.required=folder&&!editing
+  publish.elements.assetId.required=release
   if(release&&fetchAssets)loadAssets()
 }
 async function loadAssets(){
@@ -177,8 +183,8 @@ async function loadAssets(){
     $('#publish-result').textContent='Lendo Releases públicas…'
     const assets=await c.listAssets();if(c!==client)return
     const s=publish.elements.assetId;s.replaceChildren(new Option('Selecione um arquivo',''))
-    for(const a of assets.filter(a=>publication==='game'?a.name.toLowerCase().endsWith('.xex'):a.name==='cards-base.xex')) s.add(new Option(a.tag+' / '+a.name+' • '+(a.size/1048576).toFixed(1)+' MiB',a.id))
-    $('#publish-result').textContent=s.length===1?'Nenhum XEX compatível. Adicione o arquivo a uma Release pública no GitHub e atualize a lista.':''
+    for(const a of assets.filter(a=>/\.(xex|zip)$/i.test(a.name))) s.add(new Option(a.tag+' / '+a.name+' • '+(a.size/1048576).toFixed(1)+' MiB',a.id))
+    $('#publish-result').textContent=s.length===1?'Nenhum pacote compatível (.xex/.zip). Adicione o arquivo a uma Release pública no GitHub e atualize a lista.':''
   }catch(e){$('#publish-result').textContent=e.message}
 }
 publish.elements.title.oninput=()=>{if(!slugEdited)publish.elements.slug.value=publish.elements.title.value.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,40)}
@@ -188,7 +194,9 @@ publish.onsubmit=async e=>{
   e.preventDefault();const b=$('#publish-submit');b.disabled=true
   try{
     const args=Object.fromEntries(new FormData(publish));args.onProgress=t=>$('#publish-result').textContent=t
-    args.file=args.source==='file'?publish.elements.file.files[0]:null;args.assetId=args.source==='release'?args.assetId:null
+    args.file=args.source==='file'?publish.elements.file.files[0]:null
+    args.files=args.source==='folder'?Array.from(publish.elements.folder.files||[]):null
+    args.assetId=args.source==='release'?args.assetId:null
     args.coverFile=publication==='game'?publish.elements.coverFile.files[0]:null
     const isGame=publication==='game';const next=isGame?await client.publishGame(args):await client.publishUpdate(args)
     ++readVersion;feed=next

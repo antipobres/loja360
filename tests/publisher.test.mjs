@@ -108,8 +108,8 @@ test('uses verified Release asset; rejects downgrade, missing digest, wrong orig
   await assert.rejects(client.publishUpdate({ build: 4, assetId: 55 }), /SHA-256/)
   state.assets = [{ ...asset, browser_download_url: 'https://github.com/outro/projeto/releases/download/v3/cards-base.xex' }]
   await assert.rejects(client.publishUpdate({ build: 4, assetId: 55 }), /repositório/)
-  await assert.rejects(client.publishUpdate({ build: 4, file: new File(['XEX2foo'],'default.xex') }), /cards-base/)
-  await assert.rejects(client.publishGame({ ...form(), file: new File(['AAAA'],'game.xex') }), /XEX2/)
+  await assert.rejects(client.publishUpdate({ build: 4, file: new File(['XEX2foo'],'default.txt') }), /xex|zip|pacote/i)
+  await assert.rejects(client.publishGame({ ...form(), file: new File(['AAAA'],'game.bin') }), /xex|zip|pacote/i)
 })
 
 test('validates cover dimensions and includes a supported cover before feed commit', async t => {

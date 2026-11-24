@@ -18,7 +18,8 @@ Site estático para publicar jogos, atualizações e ideias da dashboard Xbox 36
 ## O que o site publica
 
 - `feed.ini`: catálogo de jogos e atualização da dash. A dashboard lê esse arquivo automaticamente.
-- `media/*.xex`, `media/*.jpg/png`: arquivos publicados pelo painel (imagens/arquivos pequenos pelo GitHub Contents; arquivos grandes via Release).
+- `media/*.xex` ou `media/*.zip`: jogos/pacotes publicados pelo painel. Você pode enviar **arquivo .xex/.zip** ou **pasta completa** (o site empacota em .zip automaticamente). Upload direto até 100 MiB; acima disso use Release do GitHub.
+- Atualizações: envie um **.zip com todos os arquivos da dash** (ou .xex, quando aplicável).
 - Ideias/chat: Issues do GitHub. O workflow `.github/workflows/dash-ideas.yml` pode responder com IA se `OPENAI_API_KEY` estiver configurado em **Settings → Secrets and variables → Actions**.
 
 ## Formato esperado pela dashboard

@@ -1,8 +1,8 @@
 // GitHub Pages publisher. The repository token lives only in the connected client.
 const utf8 = new TextEncoder()
 const decoder = new TextDecoder('utf-8', { fatal: true })
-const maxXex = 2147483647
-const maxDirect = 20 * 1024 * 1024
+const maxPackage = 2147483647
+const maxDirect = 100 * 1024 * 1024
 const maxCover = 2 * 1024 * 1024
 const maxFeed = 64 * 1024
 const digestPattern = /^[a-f\d]{64}$/i
@@ -20,7 +20,7 @@ function field(value, bytes, label, optional = false) {
   return s
 }
 
-function number(value, label, max = maxXex) {
+function number(value, label, max = maxPackage) {
   const n = Number(value)
   check(/^\d+$/.test(String(value)) && Number.isSafeInteger(n) && n > 0 && n <= max, `${label} inválido.`)
   return n
@@ -188,8 +188,64 @@ function imageType(bytes) {
 }
 
 function validName(name, forUpdate) {
-  check(forUpdate ? /^cards-base\.xex$/i.test(name) : /\.xex$/i.test(name),
-    forUpdate ? 'Para atualizar, selecione o aplicativo cards-base.xex.' : 'Selecione um jogo autocontido em formato .xex.')
+  const ok = /\.(xex|zip)$/i.test(name || '')
+  check(ok, forUpdate
+    ? 'Selecione um pacote .zip da dash completa ou um .xex.'
+    : 'Selecione um .xex ou um pacote .zip do jogo.')
+}
+
+function isXex(bytes) { return bytes.length >= 4 && bytes[0] === 88 && bytes[1] === 69 && bytes[2] === 88 && bytes[3] === 50 }
+function isZip(bytes) { return bytes.length >= 4 && bytes[0] === 0x50 && bytes[1] === 0x4b && (bytes[2] === 0x03 || bytes[2] === 0x05 || bytes[2] === 0x07) && (bytes[3] === 0x04 || bytes[3] === 0x06 || bytes[3] === 0x08) }
+const crcTable = (() => { const t = new Uint32Array(256); for (let i=0;i<256;i++){ let c=i; for(let k=0;k<8;k++) c = c&1 ? (0xEDB88320 ^ (c>>>1)) : (c>>>1); t[i]=c>>>0; } return t })()
+function crc32(bytes){ let c=0xFFFFFFFF; for(let i=0;i<bytes.length;i++) c = crcTable[(c^bytes[i])&0xFF] ^ (c>>>8); return (c^0xFFFFFFFF)>>>0 }
+function dosDateTime(d=new Date()){ const year=Math.max(1980,d.getFullYear()); const dosTime=((d.getHours()&31)<<11)|((d.getMinutes()&63)<<5)|((Math.floor(d.getSeconds()/2))&31); const dosDate=(((year-1980)&127)<<9)|(((d.getMonth()+1)&15)<<5)|(d.getDate()&31); return {dosTime,dosDate} }
+async function zipFiles(files, onProgress) {
+  const entries = []
+  let total = 0
+  for (const f of files) {
+    const name = String(f.path || f.name || '').replace(/\\/g,'/').replace(/^\/+/, '')
+    check(name && !name.includes('..') && !name.startsWith('/') && utf8.encode(name).length <= 255, 'Nome de arquivo inválido no pacote.')
+    if (name.endsWith('/')) continue
+    const data = new Uint8Array(await f.arrayBuffer())
+    total += data.length
+    check(total <= maxDirect, 'O pacote excede o limite de 100 MiB para envio direto. Use um arquivo .zip menor ou uma Release do GitHub.')
+    entries.push({ name, data, crc: crc32(data) })
+  }
+  check(entries.length > 0, 'Selecione ao menos um arquivo.')
+  const {dosTime,dosDate} = dosDateTime()
+  const localParts = []
+  const centralParts = []
+  let offset = 0
+  for (let i=0;i<entries.length;i++) {
+    const e = entries[i]
+    const nameBytes = utf8.encode(e.name)
+    const local = new Uint8Array(30 + nameBytes.length)
+    const v = new DataView(local.buffer)
+    v.setUint32(0, 0x04034b50, true); v.setUint16(4,20,true); v.setUint16(6,0,true); v.setUint16(8,0,true)
+    v.setUint16(10,dosTime,true); v.setUint16(12,dosDate,true); v.setUint32(14,e.crc,true)
+    v.setUint32(18,e.data.length,true); v.setUint32(22,e.data.length,true); v.setUint16(26,nameBytes.length,true); v.setUint16(28,0,true)
+    local.set(nameBytes,30)
+    localParts.push(local,e.data)
+    const central = new Uint8Array(46 + nameBytes.length)
+    const cv = new DataView(central.buffer)
+    cv.setUint32(0,0x02014b50,true); cv.setUint16(4,20,true); cv.setUint16(6,20,true); cv.setUint16(8,0,true); cv.setUint16(10,0,true)
+    cv.setUint16(12,dosTime,true); cv.setUint16(14,dosDate,true); cv.setUint32(16,e.crc,true)
+    cv.setUint32(20,e.data.length,true); cv.setUint32(24,e.data.length,true); cv.setUint16(28,nameBytes.length,true)
+    cv.setUint16(30,0,true); cv.setUint16(32,0,true); cv.setUint16(34,0,true); cv.setUint16(36,0,true); cv.setUint32(38,0,true); cv.setUint32(42,offset,true)
+    central.set(nameBytes,46)
+    centralParts.push(central)
+    offset += local.length + e.data.length
+    if (onProgress && i % 10 === 0) onProgress('Empacotando arquivos... ' + (i+1) + '/' + entries.length)
+  }
+  const centralSize = centralParts.reduce((n,p)=>n+p.length,0)
+  const eocd = new Uint8Array(22)
+  const ev = new DataView(eocd.buffer)
+  ev.setUint32(0,0x06054b50,true); ev.setUint16(4,0,true); ev.setUint16(6,0,true); ev.setUint16(8,entries.length,true); ev.setUint16(10,entries.length,true)
+  ev.setUint32(12,centralSize,true); ev.setUint32(16,offset,true); ev.setUint16(20,0,true)
+  const out = new Uint8Array(offset + centralSize + 22)
+  let p = 0
+  for (const part of [...localParts, ...centralParts, eocd]) { out.set(part,p); p += part.length }
+  return out
 }
 
 const ids = /^[a-z\d_.-]{1,100}$/i
@@ -272,7 +328,7 @@ export async function connect({ owner, repo, branch = 'main', prefix = '', token
     for (const release of releases) {
       const items = await pages('/releases/' + number(release.id,'Release',Number.MAX_SAFE_INTEGER) + '/assets')
       for (const a of items) {
-        if (a.state !== 'uploaded' || !/\.xex$/i.test(a.name) || !Number.isInteger(a.size) || a.size <= 0 || a.size > maxXex) continue
+        if (a.state !== 'uploaded' || !/\.(xex|zip)$/i.test(a.name) || !Number.isInteger(a.size) || a.size <= 0 || a.size > maxPackage) continue
         checkSource(a.browser_download_url)
         const digest = /^sha256:([a-f\d]{64})$/i.exec(a.digest || '')
         assets.push({ id: a.id, name: a.name, tag: release.tag_name, size: a.size,
@@ -282,7 +338,10 @@ export async function connect({ owner, repo, branch = 'main', prefix = '', token
     return assets
   }
   async function payload(form, forUpdate, notify) {
-    check(Boolean(form.file) !== Boolean(form.assetId), 'Escolha um arquivo local ou um arquivo de Release.')
+    const folderFiles = Array.from(form.files || []).filter(f => f && f.size >= 0)
+    const hasFolder = folderFiles.length > 1 || (folderFiles.length === 1 && (folderFiles[0].webkitRelativePath || folderFiles[0].path))
+    const hasSingle = Boolean(form.file)
+    check((hasSingle || hasFolder) !== Boolean(form.assetId), 'Escolha um arquivo/pasta local ou um arquivo de Release.')
     if (form.assetId) {
       const id = number(form.assetId, 'Arquivo da Release', Number.MAX_SAFE_INTEGER)
       notify('Verificando o arquivo na Release…')
@@ -292,16 +351,31 @@ export async function connect({ owner, repo, branch = 'main', prefix = '', token
       check(selected.sha256, 'O GitHub não informou SHA-256. Reenvie o arquivo à Release.')
       return pkg(selected)
     }
-    const f = form.file
-    validName(f.name, forUpdate)
-    check(f.size >= 4 && f.size <= maxDirect, 'Para arquivos acima de 20 MiB, use uma Release pública do GitHub.')
-    notify('Verificando XEX e calculando SHA-256…')
-    const bytes = new Uint8Array(await f.arrayBuffer())
-    check(bytes.length === f.size && bytes[0] === 88 && bytes[1] === 69 && bytes[2] === 88 && bytes[3] === 50,
-      'Este arquivo não contém o cabeçalho XEX2 do Xbox 360.')
+
+    let bytes
+    let ext = '.zip'
+    if (hasFolder) {
+      notify('Empacotando pasta em .zip…')
+      const mapped = folderFiles.map(f => ({ path: f.webkitRelativePath || f.name, arrayBuffer: () => f.arrayBuffer() }))
+      bytes = await zipFiles(mapped, notify)
+      ext = '.zip'
+    } else {
+      const f = form.file
+      validName(f.name, forUpdate)
+      check(f.size >= 4 && f.size <= maxDirect, 'Arquivo acima de 100 MiB para envio direto. Use uma Release do GitHub ou um pacote menor.')
+      notify('Lendo arquivo e calculando SHA-256…')
+      bytes = new Uint8Array(await f.arrayBuffer())
+      const zip = isZip(bytes)
+      const xex = isXex(bytes)
+      check(zip || xex, 'Envie um .xex válido ou um pacote .zip.')
+      ext = zip ? '.zip' : '.xex'
+      if (xex) check(bytes[0] === 88 && bytes[1] === 69 && bytes[2] === 88 && bytes[3] === 50, 'XEX2 inválido.')
+    }
+    check(bytes.length > 0 && bytes.length <= maxPackage, 'Pacote inválido.')
+    notify('Calculando SHA-256…')
     const sha256 = await hash(bytes)
-    notify('Enviando o executável ao GitHub…')
-    const url = await storeBytes('media/' + sha256 + '.xex', bytes)
+    notify('Enviando pacote ao GitHub…')
+    const url = await storeBytes('media/' + sha256 + ext, bytes)
     return { url, sha256, size: bytes.length }
   }
   async function commit(start, item, asUpdate) {
