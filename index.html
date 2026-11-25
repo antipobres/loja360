@@ -70,8 +70,10 @@
     <div class="pane stack" id="drive-pane"><h2>Google Drive</h2>
       <p class="hint">Conecte o Google Drive para importar arquivos no catálogo e enviar pacotes. A sessão é renovada automaticamente (refresh token salvo no cofre criptografado).</p>
       <label>Google OAuth Client ID<input name="driveClientId" id="drive-client-id" placeholder="xxxx.apps.googleusercontent.com" autocomplete="off"></label>
-      <div class="actions"><button class="outline" type="button" id="drive-connect">Conectar Google Drive</button><button class="outline" type="button" id="drive-disconnect">Desconectar</button></div>
+      <label>Google OAuth Client Secret <small>(salvo no cofre criptografado)</small><input name="driveClientSecret" id="drive-client-secret" type="password" placeholder="GOCSPX-..." autocomplete="off"></label>
+      <div class="actions"><button class="primary" type="button" id="drive-connect">Entrar com Google / Conectar Drive</button><button class="outline" type="button" id="drive-disconnect">Desconectar</button></div>
       <p class="hint" id="drive-status">Drive não conectado.</p>
+      <p class="hint">Para ficar permanente: desbloqueie o cofre local com uma senha. O refresh token do Google será salvo criptografado no navegador.</p>
       <div class="pair"><label>ID/link da pasta Biblioteca no Drive<input id="drive-folder-library" placeholder="ID da pasta ou link do Drive"></label><button class="outline" type="button" id="drive-sync-library">Puxar Biblioteca</button></div>
       <div class="pair"><label>ID/link da pasta Atualizações no Drive<input id="drive-folder-updates" placeholder="ID da pasta ou link do Drive"></label><button class="outline" type="button" id="drive-sync-updates">Puxar Atualizações</button></div>
       <div class="pair"><label>Enviar arquivo para o Drive<input type="file" id="drive-upload-file"></label><button class="outline" type="button" id="drive-upload">Enviar para Drive</button></div>

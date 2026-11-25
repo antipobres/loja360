@@ -134,7 +134,7 @@ async function vaultDerive(pass,salt){
   return crypto.subtle.deriveKey({name:'PBKDF2',salt,iterations:120000,hash:'SHA-256'},base,{name:'AES-GCM',length:256},false,['encrypt','decrypt'])
 }
 function vaultStatus(t){ const el=$('#vault-status'); if(el) el.textContent=t }
-function vaultData(){ return {config, token: settings.elements.token.value.trim() || githubTokenMem || '', driveClientId: drive.clientId || '', driveRefreshToken: drive.refreshToken || '', driveFolders: {library:$('#drive-folder-library')?.value||'', updates:$('#drive-folder-updates')?.value||''}} }
+function vaultData(){ return {config, token: settings.elements.token.value.trim() || githubTokenMem || '', driveClientId: drive.clientId || '', driveClientSecret: $('#drive-client-secret')?.value?.trim() || drive.clientSecret || '', driveRefreshToken: drive.refreshToken || '', driveFolders: {library:$('#drive-folder-library')?.value||'', updates:$('#drive-folder-updates')?.value||''}} }
 async function vaultPersist(){
   if(!vaultMemKey) return
   const iv=crypto.getRandomValues(new Uint8Array(12))
@@ -162,6 +162,7 @@ async function vaultUnlock(pass){
       const data=JSON.parse(td.decode(pt))
       if(data.config) config = { ...config, ...data.config }
       if(data.driveClientId) { drive.clientId=data.driveClientId; const di=$('#drive-client-id'); if(di) di.value=drive.clientId; try{localStorage.setItem('cards-drive-client-id',drive.clientId)}catch{} }
+      if(data.driveClientSecret) { drive.clientSecret=data.driveClientSecret; const ds=$('#drive-client-secret'); if(ds) ds.value=drive.clientSecret }
       if(data.driveRefreshToken) { drive.refreshToken = data.driveRefreshToken }
       if(data.driveFolders){ if(data.driveFolders.library && $('#drive-folder-library')) $('#drive-folder-library').value=data.driveFolders.library; if(data.driveFolders.updates && $('#drive-folder-updates')) $('#drive-folder-updates').value=data.driveFolders.updates; try{localStorage.setItem('cards-drive-folders',JSON.stringify(data.driveFolders))}catch{} }
       fillSettings(); draw()
@@ -384,7 +385,7 @@ ideaForm.onsubmit=async e=>{
   catch(err){$('#idea-result').textContent=err.message}finally{b.disabled=false}
 }
 // --- Google Drive OAuth 2.0 (PKCE) ---
-const drive = { token:null, expires:0, refreshToken:'', clientId: localStorage.getItem('cards-drive-client-id') || '654689610968-fe4ho0kk0ppm8gnvuq0tookk9llrkobd.apps.googleusercontent.com' }
+const drive = { token:null, expires:0, refreshToken:'', clientId: localStorage.getItem('cards-drive-client-id') || '654689610968-fe4ho0kk0ppm8gnvuq0tookk9llrkobd.apps.googleusercontent.com', clientSecret:'' }
 try{ const ds=JSON.parse(sessionStorage.getItem('cards-drive-session')||'null'); if(ds?.token){ drive.token=ds.token; drive.expires=ds.expires||0 } }catch{}
 const driveStatus = (t)=>{ const el=$('#drive-status'); if(el) el.textContent=t }
 const b64url = (buf)=>btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'')
@@ -394,10 +395,12 @@ async function pkce(){
   return { verifier, challenge: b64url(digest) }
 }
 function driveRedirect(){ return location.origin + location.pathname }
-function saveDriveClientId(){ drive.clientId = ($('#drive-client-id')?.value || '').trim(); try{ localStorage.setItem('cards-drive-client-id', drive.clientId) }catch{} }
+function saveDriveClientId(){ drive.clientId = ($('#drive-client-id')?.value || '').trim(); drive.clientSecret = ($('#drive-client-secret')?.value || '').trim(); try{ localStorage.setItem('cards-drive-client-id', drive.clientId) }catch{} }
 async function driveConnect(){
   saveDriveClientId()
   if(!drive.clientId) { driveStatus('Informe o Google OAuth Client ID.'); return }
+  if(!drive.clientSecret) { driveStatus('Informe o Google OAuth Client Secret (salvo no cofre).'); return }
+  if(!vaultMemKey){ driveStatus('Desbloqueie/crie o cofre local primeiro para salvar o login do Drive.'); $('#vault-pass')?.focus(); return }
   const {verifier, challenge} = await pkce()
   const state = b64url(crypto.getRandomValues(new Uint8Array(16)))
   sessionStorage.setItem('drive_pkce_verifier', verifier)
@@ -415,6 +418,7 @@ function driveSaveSession(){
 async function driveRefreshAccessToken(){
   if(!drive.refreshToken) throw new Error('Conecte o Google Drive novamente.')
   const body = new URLSearchParams({ client_id: drive.clientId, grant_type:'refresh_token', refresh_token: drive.refreshToken })
+  if(drive.clientSecret) body.set('client_secret', drive.clientSecret)
   const r = await fetch('https://oauth2.googleapis.com/token', { method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body })
   const j = await r.json()
   if(!r.ok){ drive.refreshToken=''; throw new Error(j.error_description || j.error || 'Falha ao renovar sessão do Drive') }
@@ -431,6 +435,7 @@ async function driveEnsureToken(){
 async function driveExchange(code){
   const verifier = sessionStorage.getItem('drive_pkce_verifier') || ''
   const body = new URLSearchParams({ client_id: drive.clientId, grant_type:'authorization_code', code, redirect_uri: driveRedirect(), code_verifier: verifier })
+  if(drive.clientSecret) body.set('client_secret', drive.clientSecret)
   const r = await fetch('https://oauth2.googleapis.com/token', { method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body })
   const j = await r.json()
   if(!r.ok) throw new Error(j.error_description || j.error || 'Falha OAuth')
@@ -438,8 +443,8 @@ async function driveExchange(code){
   if(j.refresh_token) drive.refreshToken = j.refresh_token
   driveSaveSession()
   sessionStorage.removeItem('drive_pkce_verifier'); sessionStorage.removeItem('drive_pkce_state')
-  if(vaultMemKey) await vaultPersist()
-  driveStatus('Google Drive conectado.')
+  if(vaultMemKey) { await vaultPersist(); driveStatus('Google Drive conectado e salvo no cofre.') }
+  else { driveStatus('Google Drive conectado, mas desbloqueie o cofre e salve para manter o login após fechar o navegador.') }
 }
 async function driveHandleCallback(){
   const p = new URLSearchParams(location.search)
