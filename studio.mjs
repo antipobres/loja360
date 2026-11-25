@@ -1,4 +1,4 @@
-import { connect, loadPublic, readFeed, hash, zipFiles, isXex, isZip } from './publisher.mjs'
+import { connect, loadPublic, readFeed, writeFeed, hash, zipFiles, isXex, isZip } from './publisher.mjs'
 
 const $ = s => document.querySelector(s)
 const names = {inicio:'Visão geral', biblioteca:'Biblioteca', catalogo:'Upload', updates:'Atualizações', ideias:'Ideias e chat', conexao:'Conexão'}
@@ -66,7 +66,7 @@ function empty(title, text) {
 function listGames(target,games,editable){
   target.replaceChildren()
   if(!games.length){
-    const filtered=editable && $('#query').value.trim()
+    const filtered=editable && ($('#query')?.value?.trim()||'')
     target.append(empty(filtered?'Nenhum jogo encontrado':'Nenhum jogo publicado',filtered?'Tente outro título ou gênero.':'O primeiro jogo publicado aqui aparecerá no catálogo do Xbox.'))
     return
   }
@@ -91,9 +91,9 @@ function draw(){
   $('#source-state').textContent=config.baseUrl?'Configurada':'Configurar'
   listGames($('#recent'),feed.games.slice(0,4),false)
   const norm=s=>s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase()
-  const q=norm($('#query').value.trim())
+  const qEl=$('#query'); const q=norm(qEl?.value?.trim()||'')
   const filtered=feed.games.filter(g=>norm([g.title,g.genre,g.description].join(' ')).includes(q))
-  listGames($('#catalog-list'),filtered,true)
+  const cat=$('#catalog-list'); if(cat) listGames(cat,filtered,true)
   const lib=$('#library-list'); if(lib) listGames(lib, feed.games, false)
   const update=feed.update
   $('#release-title').textContent=update?'Build '+update.build:'Sem build publicada'
@@ -118,11 +118,16 @@ async function refresh(silent=false){
       pending=null
     }
     feed=next;draw()
-  }catch(e){if(!silent && version===readVersion) feedback('Catálogo indisponível. '+e.message,true)}
+  }catch(e){
+    if(version!==readVersion) return
+    try{ const local=JSON.parse(localStorage.getItem('cards-studio-feed-local')||'null'); if(local && Array.isArray(local.games)){ feed=local; draw(); if(!silent) feedback('Usando catálogo salvo localmente.', false); return } }catch{}
+    if(!silent) feedback('Catálogo indisponível. '+e.message,true)
+  }
 }
 function requireClient(){
-  if(client)return true
-  location.hash='conexao';feedback('Conecte a conta do GitHub para publicar neste repositório.');return false
+  if(client) return true
+  feedback('Sem conexão GitHub: a publicação será salva localmente. Conecte em Conexão para publicar no site.', false)
+  return true
 }
 function askConnect(){location.hash='conexao'}
 let githubTokenMem=''
@@ -144,6 +149,7 @@ settings.addEventListener('submit',async e=>{
   }catch(err){feedback(err.message,true)}finally{button.disabled=false}
 })
 $('#disconnect').onclick=()=>{client=null;activeThread=0;threadVersion++;threadStamp='';settings.elements.token.value='';fillSettings();draw();feedback('Conta desconectada.');$('#thread').replaceChildren(node('h2','Selecione uma ideia'))}
+$('#refresh-store') && ($('#refresh-store').onclick=async()=>{ feedback('Atualizando a loja...'); await refresh(false); feedback('Loja atualizada. A dash vai carregar o feed ao abrir o menu da loja.') })
 $('#download-config').onclick=()=>{
   try{
     if(!config.repo) throw Error('Salve o endereço do repositório antes de gerar o arquivo.')
@@ -286,12 +292,32 @@ publish.onsubmit=async e=>{
     }
     args.coverFile=publication==='game'&&publish.elements.coverFile?.files?.[0]?publish.elements.coverFile.files[0]:null
     args.backgroundFile=publication==='game'&&publish.elements.backgroundFile?.files?.[0]?publish.elements.backgroundFile.files[0]:null
-    const isGame=publication==='game';const next=isGame?await client.publishGame(args):await client.publishUpdate(args)
+    const isGame=publication==='game'
+    let next
+    if(client){
+      next=isGame?await client.publishGame(args):await client.publishUpdate(args)
+    } else {
+      if(args.coverFile || args.backgroundFile) throw new Error('Para enviar capa/fundo, conecte o GitHub em Conexão. Ou publique sem capa agora.')
+      const base={...feed, games:[...feed.games]}
+      if(isGame){
+        const entry={slug:(args.slug||'').trim(), title:(args.title||'').trim(), genre:(args.genre||'').trim(), description:(args.description||'').trim(), url:args.externalUrl, sha256:(args.externalSha||'').toLowerCase(), size:Number(args.externalSize)}
+        const i=base.games.findIndex(g=>g.slug===entry.slug)
+        if(i>=0) base.games[i]={...base.games[i],...entry}
+        else base.games.unshift(entry)
+      } else {
+        const build=Number(args.build)
+        if(build <= Number(feed.update?.build||0)) throw new Error('Use um build maior que o já publicado.')
+        base.update={build, url:args.externalUrl, sha256:(args.externalSha||'').toLowerCase(), size:Number(args.externalSize), notes:(args.notes||'').trim()}
+      }
+      writeFeed(base)
+      next=base
+      try{ localStorage.setItem('cards-studio-feed-local', JSON.stringify(next)) }catch{}
+    }
     ++readVersion;feed=next
     const entry=isGame?next.games.find(g=>g.slug===args.slug):next.update
     pending={slug:isGame?args.slug:'',value:JSON.stringify(entry),deadline:Date.now()+600000}
     draw();$('#publish-dialog').close();location.hash=isGame?'biblioteca':'updates'
-    feedback('Publica??o salva no cat?logo.')
+    feedback(client?'Publicação salva no catálogo.':'Publicação salva localmente. Conecte o GitHub em Conexão para publicar no site.')
   }catch(err){$('#publish-result').textContent=err.message}finally{b.disabled=false}
 }
 const ideaTitle=s=>s.replace(/^\[Ideia\]\s*/,'')

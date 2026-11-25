@@ -126,7 +126,7 @@ export function readFeed(text) {
   return result
 }
 
-function writeFeed(feed) {
+export function writeFeed(feed) {
   const lines = ['[store]', 'schema=1']
   const section = (name, data) => {
     lines.push('', '[' + name + ']')
