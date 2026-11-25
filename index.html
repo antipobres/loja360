@@ -52,6 +52,12 @@
   </section>
   <section id="conexao" class="view" hidden>
     <div class="page-title"><div><p class="kicker">Integração</p><h1>Conexão</h1></div></div>
+    <form class="pane stack" id="vault-form"><h2>Acesso local</h2>
+      <p class="hint">Proteja o token e configurações neste navegador com uma senha local. Os dados são criptografados com Web Crypto (AES-GCM).</p>
+      <label>Senha local<input name="password" id="vault-pass" type="password" autocomplete="current-password" placeholder="Senha local"></label>
+      <div class="actions"><button class="primary" type="submit" id="vault-unlock">Desbloquear / Salvar</button><button class="outline" type="button" id="vault-lock">Bloquear</button></div>
+      <p class="hint" id="vault-status" role="status">Bloqueado.</p>
+    </form>
     <form class="pane stack" id="settings-form"><h2>Repositório no GitHub</h2>
     <p class="hint">Use um repositório público com GitHub Pages. O Xbox lê o catálogo mesmo com seu PC desligado.</p>
     <div class="pair"><label>Conta ou organização<input name="owner" required autocomplete="off" placeholder="seu-usuario"></label><label>Repositório<input name="repo" required placeholder="cards-studio"></label></div>
@@ -61,6 +67,15 @@
     <p class="hint">Use um token fine-grained com escrita em Contents e Issues. A credencial fica em memória até você sair ou fechar a página.</p>
     <div class="actions"><button class="primary" type="submit">Salvar conexão</button><button class="outline" type="button" id="disconnect">Desconectar conta</button></div></form>
     <div class="pane setup"><h2>Conectar a dashboard</h2><p>Gere o arquivo e copie para <code>assets/store-site.ini</code> da dash no Xbox. Depois, jogos e builds vêm do site.</p><button class="outline" id="download-config">Baixar store-site.ini</button></div>
+    <div class="pane stack" id="drive-pane"><h2>Google Drive</h2>
+      <p class="hint">Conecte o Google Drive para importar arquivos no catálogo e enviar pacotes. Use OAuth 2.0 (PKCE) com um Client ID do Google Cloud.</p>
+      <label>Google OAuth Client ID<input name="driveClientId" id="drive-client-id" placeholder="xxxx.apps.googleusercontent.com" autocomplete="off"></label>
+      <div class="actions"><button class="outline" type="button" id="drive-connect">Conectar Google Drive</button><button class="outline" type="button" id="drive-disconnect">Desconectar</button></div>
+      <p class="hint" id="drive-status">Drive não conectado.</p>
+      <div class="pair"><label>Enviar arquivo para o Drive<input type="file" id="drive-upload-file"></label><button class="outline" type="button" id="drive-upload">Enviar para Drive</button></div>
+      <div class="actions"><button class="outline" type="button" id="drive-list">Listar arquivos do Drive</button></div>
+      <div id="drive-files" class="hint"></div>
+    </div>
   </section>
   <footer><span>Cards Studio</span><span>Xbox 360 • Publicação</span></footer>
 </main>
@@ -68,10 +83,17 @@
   <button type="button" class="close" data-close aria-label="Fechar">×</button><p class="kicker" id="publish-type"></p><h2 id="publish-title">Publicar jogo</h2>
   <div id="game-fields" class="stack"><label>Título<input name="title" maxlength="80" required></label><div class="pair"><label>Identificador<input name="slug" maxlength="40" pattern="[a-z0-9-]+" required></label><label>Gênero<input name="genre" maxlength="48" required></label></div><label>Descrição<textarea name="description" rows="2" maxlength="320" required></textarea></label><label>Capa opcional • PNG ou JPG<input type="file" accept="image/png,image/jpeg" name="coverFile"></label></div>
   <div id="update-fields" class="stack" hidden><label>Número da build<input name="build" type="number" min="1" max="2147483647"></label><label>Notas da versão<textarea name="notes" rows="2" maxlength="320"></textarea></label></div>
-  <label>Origem do arquivo<select name="source"><option value="file">Arquivo .xex ou .zip</option><option value="folder">Pasta completa (empacota em .zip)</option><option value="release">Arquivo de uma Release do GitHub</option></select></label>
+  <label>Origem do arquivo<select name="source"><option value="file">Arquivo .xex ou .zip</option><option value="folder">Pasta completa (empacota em .zip)</option><option value="release">Arquivo de uma Release do GitHub</option><option value="url">URL externa / Google Drive</option></select></label>
   <label id="file-source"><span id="file-label">Pacote do jogo (.xex ou .zip)</span><input name="file" type="file" accept=".xex,.zip"></label>
   <label id="folder-source" hidden><span id="folder-label">Pasta do jogo (todos os arquivos)</span><input name="folder" type="file" webkitdirectory directory multiple></label>
   <div class="stack" id="release-source" hidden><label>Arquivo da Release<select name="assetId"><option value="">Selecione um arquivo</option></select></label><div class="actions"><button class="outline" type="button" id="reload-assets">Atualizar arquivos</button><a id="release-link" target="_blank" rel="noopener noreferrer">Abrir Releases no GitHub</a></div></div>
+  <div class="stack" id="url-source" hidden>
+    <label>URL HTTPS do arquivo (suporta Google Drive compartilhado)<input name="externalUrl" type="url" placeholder="https://... ou link do Google Drive"></label>
+    <div class="pair"><label>SHA-256<input name="externalSha" placeholder="64 caracteres hex"></label><label>Tamanho em bytes<input name="externalSize" type="number" min="1"></label></div>
+    <div class="actions"><button class="outline" type="button" id="pick-drive-file">Escolher do Google Drive</button></div>
+    <div id="drive-picker" class="hint" hidden></div>
+    <p class="hint">Com Drive conectado, o upload local vai para o Drive automaticamente. Você também pode colar um link compartilhado do Drive aqui.</p>
+  </div>
   <p role="status" class="hint" id="publish-result"></p><button class="primary" type="submit" id="publish-submit">Publicar no catálogo</button>
 </form></dialog>
 <dialog id="idea-dialog" aria-labelledby="idea-title"><form class="stack" id="idea-form"><button type="button" class="close" data-close aria-label="Fechar">×</button><p class="kicker">GitHub Issues</p><h2 id="idea-title">Nova ideia</h2><label>Título<input name="title" maxlength="120" required></label><label>Ideia ou pergunta<textarea name="body" rows="5" maxlength="4000" required></textarea></label><label class="check"><input type="checkbox" name="chat" checked> Pedir uma resposta da IA</label><p class="hint">O texto será publicado no repositório público.</p><p class="hint" id="idea-result" role="status"></p><button class="primary">Publicar ideia</button></form></dialog>

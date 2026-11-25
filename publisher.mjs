@@ -1,7 +1,7 @@
 // GitHub Pages publisher. The repository token lives only in the connected client.
 const utf8 = new TextEncoder()
 const decoder = new TextDecoder('utf-8', { fatal: true })
-const maxPackage = 2147483647
+const maxPackage = 20 * 1024 * 1024 * 1024 // 20 GiB - multipart/Drive
 const maxDirect = 100 * 1024 * 1024
 const maxCover = 2 * 1024 * 1024
 const maxFeed = 64 * 1024
@@ -47,10 +47,34 @@ function base(value) {
   return u.href.replace(/\/*$/, '/')
 }
 
+function parseParts(v, maxTotal=maxPackage) {
+  const n = v.parts === '' || v.parts == null ? 0 : number(v.parts, 'Parts', 64)
+  if (!n) return []
+  const parts = []
+  let total = 0
+  for (let i = 0; i < n; i++) {
+    const p = { url: v['part'+i+'_url'] || v['part'+i+'url'], sha256: (v['part'+i+'_sha256'] || v['part'+i+'sha256'] || '').toLowerCase(), size: v['part'+i+'_size'] || v['part'+i+'size'] }
+    check(p.url && p.sha256 && p.size, 'Parte ' + i + ' inválida no catálogo.')
+    https(p.url); check(digestPattern.test(p.sha256), 'SHA-256 da parte inválido.')
+    const size = number(p.size, 'Tamanho da parte', maxTotal)
+    total += size; check(total <= maxTotal, 'Pacote multipart excede o limite.')
+    parts.push({ url: p.url, sha256: p.sha256, size })
+  }
+  return parts
+}
+
 function pkg(v) {
   check(digestPattern.test(v.sha256 || ''), 'SHA-256 inválido.')
   https(v.url)
-  return { url: v.url, sha256: v.sha256.toLowerCase(), size: number(v.size, 'Tamanho') }
+  const out = { url: v.url, sha256: v.sha256.toLowerCase(), size: number(v.size, 'Tamanho') }
+  const parts = Array.isArray(v.parts) ? v.parts : parseParts(v)
+  if (parts.length) {
+    out.parts = parts.map((p, i) => {
+      https(p.url); check(digestPattern.test(p.sha256||''), 'SHA-256 da parte inválido.')
+      return { url: p.url, sha256: String(p.sha256).toLowerCase(), size: number(p.size, 'Tamanho da parte', maxPackage) }
+    })
+  }
+  return out
 }
 
 function game(v) {
@@ -91,8 +115,9 @@ export function readFeed(text) {
   for (const [name, data] of sections) {
     if (name === 'store') continue
     const isGame = name.startsWith('game:')
-    const allowed = isGame ? ['title','genre','description','url','sha256','size','cover'] : ['build','url','sha256','size','notes']
-    check(Object.keys(data).every(k => allowed.includes(k)), 'Campo desconhecido no catálogo.')
+    const allowed = isGame ? ['title','genre','description','url','sha256','size','cover','parts'] : ['build','url','sha256','size','notes','parts']
+    const partKey = /^part\d+_(url|sha256|size)$/
+    check(Object.keys(data).every(k => allowed.includes(k) || partKey.test(k)), 'Campo desconhecido no catálogo.')
     if (isGame) result.games.push(game({ ...data, slug: name.slice(5) }))
     else result.update = update(data)
   }
@@ -104,7 +129,16 @@ function writeFeed(feed) {
   const lines = ['[store]', 'schema=1']
   const section = (name, data) => {
     lines.push('', '[' + name + ']')
-    for (const [key, value] of Object.entries(data)) if (value !== '') lines.push(key + '=' + value)
+    for (const [key, value] of Object.entries(data)) {
+      if (value === '' || value == null) continue
+      if (key === 'parts' && Array.isArray(value)) {
+        if (!value.length) continue
+        lines.push('parts=' + value.length)
+        value.forEach((p, i) => { lines.push(`part${i}_url=${p.url}`); lines.push(`part${i}_sha256=${p.sha256}`); lines.push(`part${i}_size=${p.size}`) })
+        continue
+      }
+      lines.push(key + '=' + value)
+    }
   }
   for (const g of feed.games) {
     const { slug: id, ...rest } = game(g)
@@ -152,7 +186,7 @@ function b64(bytes) {
   return btoa(s)
 }
 function fromB64(value) { return Uint8Array.from(atob(value), c => c.charCodeAt(0)) }
-async function hash(bytes, algorithm = 'SHA-256') {
+export async function hash(bytes, algorithm = 'SHA-256') {
   const buf = await crypto.subtle.digest(algorithm, bytes)
   return Array.from(new Uint8Array(buf), n => n.toString(16).padStart(2,'0')).join('')
 }
@@ -194,12 +228,12 @@ function validName(name, forUpdate) {
     : 'Selecione um .xex ou um pacote .zip do jogo.')
 }
 
-function isXex(bytes) { return bytes.length >= 4 && bytes[0] === 88 && bytes[1] === 69 && bytes[2] === 88 && bytes[3] === 50 }
-function isZip(bytes) { return bytes.length >= 4 && bytes[0] === 0x50 && bytes[1] === 0x4b && (bytes[2] === 0x03 || bytes[2] === 0x05 || bytes[2] === 0x07) && (bytes[3] === 0x04 || bytes[3] === 0x06 || bytes[3] === 0x08) }
+export function isXex(bytes) { return bytes.length >= 4 && bytes[0] === 88 && bytes[1] === 69 && bytes[2] === 88 && bytes[3] === 50 }
+export function isZip(bytes) { return bytes.length >= 4 && bytes[0] === 0x50 && bytes[1] === 0x4b && (bytes[2] === 0x03 || bytes[2] === 0x05 || bytes[2] === 0x07) && (bytes[3] === 0x04 || bytes[3] === 0x06 || bytes[3] === 0x08) }
 const crcTable = (() => { const t = new Uint32Array(256); for (let i=0;i<256;i++){ let c=i; for(let k=0;k<8;k++) c = c&1 ? (0xEDB88320 ^ (c>>>1)) : (c>>>1); t[i]=c>>>0; } return t })()
 function crc32(bytes){ let c=0xFFFFFFFF; for(let i=0;i<bytes.length;i++) c = crcTable[(c^bytes[i])&0xFF] ^ (c>>>8); return (c^0xFFFFFFFF)>>>0 }
 function dosDateTime(d=new Date()){ const year=Math.max(1980,d.getFullYear()); const dosTime=((d.getHours()&31)<<11)|((d.getMinutes()&63)<<5)|((Math.floor(d.getSeconds()/2))&31); const dosDate=(((year-1980)&127)<<9)|(((d.getMonth()+1)&15)<<5)|(d.getDate()&31); return {dosTime,dosDate} }
-async function zipFiles(files, onProgress) {
+export async function zipFiles(files, onProgress) {
   const entries = []
   let total = 0
   for (const f of files) {
@@ -337,11 +371,31 @@ export async function connect({ owner, repo, branch = 'main', prefix = '', token
     }
     return assets
   }
+  function normalizeExternalUrl(raw) {
+    let u = String(raw || '').trim()
+    const m = u.match(/drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/) || u.match(/[?&]id=([a-zA-Z0-9_-]+)/)
+    if (m && /drive\.google\.com/.test(u)) u = 'https://drive.google.com/uc?export=download&confirm=t&id=' + m[1]
+    https(u)
+    return u
+  }
+
   async function payload(form, forUpdate, notify) {
     const folderFiles = Array.from(form.files || []).filter(f => f && f.size >= 0)
     const hasFolder = folderFiles.length > 1 || (folderFiles.length === 1 && (folderFiles[0].webkitRelativePath || folderFiles[0].path))
     const hasSingle = Boolean(form.file)
-    check((hasSingle || hasFolder) !== Boolean(form.assetId), 'Escolha um arquivo/pasta local ou um arquivo de Release.')
+    const hasExternal = Boolean(form.externalUrl)
+    const local = hasSingle || hasFolder
+    check([local, Boolean(form.assetId), hasExternal].filter(Boolean).length === 1, 'Escolha arquivo/pasta local, Release ou URL externa.')
+    if (form.externalUrl) {
+      const url = normalizeExternalUrl(form.externalUrl)
+      const sha256 = String(form.externalSha || '').trim().toLowerCase()
+      check(digestPattern.test(sha256), 'Informe o SHA-256 do arquivo externo.')
+      const size = number(form.externalSize, 'Tamanho', maxPackage)
+      const parts = Array.isArray(form.parts) ? form.parts.map(p => ({ url: normalizeExternalUrl(p.url), sha256: String(p.sha256||'').toLowerCase(), size: number(p.size, 'Tamanho da parte', maxPackage) })) : []
+      parts.forEach(p => check(digestPattern.test(p.sha256), 'SHA-256 da parte inválido.'))
+      if (parts.length) check(parts.reduce((a,p)=>a+p.size,0) === size, 'Soma das partes deve ser igual ao tamanho total.')
+      return parts.length ? { url, sha256, size, parts } : { url, sha256, size }
+    }
     if (form.assetId) {
       const id = number(form.assetId, 'Arquivo da Release', Number.MAX_SAFE_INTEGER)
       notify('Verificando o arquivo na Release…')
@@ -362,7 +416,7 @@ export async function connect({ owner, repo, branch = 'main', prefix = '', token
     } else {
       const f = form.file
       validName(f.name, forUpdate)
-      check(f.size >= 4 && f.size <= maxDirect, 'Arquivo acima de 100 MiB para envio direto. Use uma Release do GitHub ou um pacote menor.')
+      check(f.size >= 4 && f.size <= maxDirect, 'Arquivo acima de 100 MiB para envio direto. Conecte o Google Drive para upload automático, ou use Release/URL externa.')
       notify('Lendo arquivo e calculando SHA-256…')
       bytes = new Uint8Array(await f.arrayBuffer())
       const zip = isZip(bytes)

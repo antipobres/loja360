@@ -72,7 +72,7 @@ test('parser rejects duplicates, oversized UTF-8 fields and line injection', () 
   assert.throws(() => readFeed(header + format('one') + format('one')))
   assert.throws(() => readFeed(header + format('one').replace('Jogo one','é'.repeat(41))))
   assert.throws(() => readFeed(header + format('one') + 'foo=bad'))
-  assert.throws(() => readFeed(header + format('one').replace('size=12', 'size=2147483648')))
+  assert.throws(() => readFeed(header + format('one').replace('size=12', 'size=21474836481')))
 })
 
 test('local upload commits immutable bytes first, merges concurrent independent change and loads public feed', async t => {
