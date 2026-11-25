@@ -107,8 +107,10 @@ test('uses verified Release asset; rejects downgrade, missing digest, wrong orig
   state.assets = [{ ...asset, digest: null }]
   await assert.rejects(client.publishUpdate({ build: 4, assetId: 55 }), /SHA-256/)
   state.assets = [{ ...asset, browser_download_url: 'https://github.com/outro/projeto/releases/download/v3/cards-base.xex' }]
-  await assert.rejects(client.publishUpdate({ build: 4, assetId: 55 }), /repositório/)
-  await assert.rejects(client.publishUpdate({ build: 4, file: new File(['XEX2foo'],'default.txt') }), /xex|zip|pacote/i)
+  // External public HTTPS URLs are allowed (user-provided Drive/public links).
+  const extFeed = await client.publishUpdate({ build: 4, assetId: 55 })
+  assert.equal(extFeed.update.url, 'https://github.com/outro/projeto/releases/download/v3/cards-base.xex')
+  await assert.rejects(client.publishUpdate({ build: 5, file: new File(['XEX2foo'],'default.txt') }), /xex|zip|pacote/i)
   await assert.rejects(client.publishGame({ ...form(), file: new File(['AAAA'],'game.bin') }), /xex|zip|pacote/i)
 })
 

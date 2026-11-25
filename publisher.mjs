@@ -158,12 +158,14 @@ function scope(owner, repo, publicBase) {
     'O endereço do Pages precisa pertencer a esse repositório.')
   return function checkSource(value) {
     const u = https(value)
+    // Allow same-site, same-repo releases, and external public HTTPS URLs (e.g. Google Drive).
+    // External URLs are user-provided public links; the dashboard downloads them directly.
     const path = u.pathname.toLowerCase()
     const prefix = '/' + owner.toLowerCase() + '/' + repo.toLowerCase() + '/releases/download/'
     const trustedRelease = u.hostname === 'github.com' && path.startsWith(prefix) &&
       /^[^/]+\/[^/]+$/.test(path.slice(prefix.length)) && !/%2e|%2f|%5c|\/\./.test(path)
-    check((u.origin === b.origin && u.pathname.startsWith(b.pathname)) || trustedRelease,
-      'O arquivo precisa estar neste site ou em uma Release deste repositório.')
+    const sameSite = u.origin === b.origin && u.pathname.startsWith(b.pathname)
+    check(sameSite || trustedRelease || u.protocol === 'https:', 'O arquivo precisa usar um endereço HTTPS válido.')
   }
 }
 

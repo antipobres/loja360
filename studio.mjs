@@ -173,27 +173,65 @@ function openPublish(kind,game=null){
 function toggleSource(){
   const us=$('#url-source'); if(us) us.hidden=false
   if(publish.elements.externalUrl) publish.elements.externalUrl.required=true
-  if(publish.elements.externalSha) publish.elements.externalSha.required=true
-  if(publish.elements.externalSize) publish.elements.externalSize.required=true
+  if(publish.elements.externalSha) publish.elements.externalSha.required=false
+  if(publish.elements.externalSize) publish.elements.externalSize.required=false
 }
 
+const DEFAULT_LIBRARY_FOLDER='https://drive.google.com/drive/folders/1xNVtJi_8Rv48lANGjJBDjTBpmoZaPnvS?usp=sharing'
+const DEFAULT_UPDATES_FOLDER='https://drive.google.com/drive/folders/1MDYFD_Q6WDB17Jn1YGVIyrOjDqpe6q8p?usp=sharing'
+function driveFolderId(url){
+  const m=String(url||'').match(/drive\.google\.com\/drive\/folders\/([a-zA-Z0-9_-]+)/) || String(url||'').match(/[?&]id=([a-zA-Z0-9_-]+)/)
+  return m?m[1]:''
+}
 function normalizePublicUrl(raw){
   let u=String(raw||'').trim()
+  const folderId=driveFolderId(u)
+  if(folderId && /\/folders\//.test(u)) return 'https://drive.google.com/uc?export=download&confirm=t&id='+folderId
   const m=u.match(/drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/) || u.match(/[?&]id=([a-zA-Z0-9_-]+)/)
   if(m && /drive\.google\.com/.test(u)) u='https://drive.google.com/uc?export=download&confirm=t&id='+m[1]
   return u
 }
+function parseDriveFolderHtml(body){
+  const entries=[]; const seen=new Set()
+  const push=(id,name,mime)=>{ if(!id||!name||seen.has(id)) return; seen.add(id); entries.push({id,name,mime:mime||''}) }
+  const re=/\["([a-zA-Z0-9_-]{25,60})"\s*,\s*\[[^\]]*\]\s*,\s*"([^"]{1,200})"\s*,\s*"((?:application\/[^"]+|[^"]*folder[^"]*|[^"]*zip[^"]*|[^"]*octet[^"]*))"/g
+  let m; while((m=re.exec(body))&&entries.length<100){ push(m[1],m[2].replace(/\\u([0-9a-fA-F]{4})/g,(_,h)=>String.fromCharCode(parseInt(h,16))),m[3]) }
+  if(!entries.length){
+    const re2=/\["([a-zA-Z0-9_-]{25,60})"\s*,\s*"([^"]+\.(?:zip|xex|ZIP|XEX))"/g
+    while((m=re2.exec(body))&&entries.length<100) push(m[1],m[2],'')
+  }
+  return entries.filter(e=>e.id && e.name && e.name!=='.' && e.name!=='..')
+}
+async function fetchDriveFolder(folderUrl){
+  const id=driveFolderId(folderUrl)
+  if(!id) throw new Error('Link de pasta do Drive inválido.')
+  const url='https://drive.google.com/drive/folders/'+id
+  const attempts=[url, 'https://corsproxy.io/?url='+encodeURIComponent(url), 'https://api.allorigins.win/raw?url='+encodeURIComponent(url)]
+  let lastErr
+  for(const u of attempts){
+    try{
+      const r=await fetch(u,{mode:'cors',credentials:'omit'})
+      if(!r.ok) throw new Error('HTTP '+r.status)
+      const body=await r.text()
+      const entries=parseDriveFolderHtml(body)
+      if(entries.length) return {id, entries}
+      // if body looks like Drive page but no entries, may be empty or parse failed
+      if(/drive\.google|_DRIVE_ivd|Drive/.test(body) && !entries.length) return {id, entries:[]}
+    }catch(e){ lastErr=e }
+  }
+  throw lastErr || new Error('Não foi possível ler a pasta pública.')
+}
 async function autoFillFromUrl(){
-  const urlRaw=publish.elements.externalUrl?.value?.trim(); if(!urlRaw) return
+  const urlRaw=publish.elements.externalUrl?.value?.trim(); if(!urlRaw) return false
   const url=normalizePublicUrl(urlRaw)
   if(url!==urlRaw && publish.elements.externalUrl) publish.elements.externalUrl.value=url
   const resEl=$('#publish-result')
   try{
     if(resEl) resEl.textContent='Obtendo tamanho e SHA-256...'
-    const r=await fetch(url, {mode:'cors'})
+    const r=await fetch(url, {mode:'cors', credentials:'omit'})
     if(!r.ok) throw new Error('HTTP '+r.status)
     const len=r.headers.get('content-length')
-    if(len && publish.elements.externalSize) publish.elements.externalSize.value=String(len)
+    if(len && publish.elements.externalSize && !publish.elements.externalSize.value) publish.elements.externalSize.value=String(len)
     const reader=r.body?.getReader?.()
     if(!reader){
       const buf=new Uint8Array(await r.arrayBuffer())
@@ -201,7 +239,7 @@ async function autoFillFromUrl(){
       if(publish.elements.externalSha) publish.elements.externalSha.value=sha
       if(publish.elements.externalSize) publish.elements.externalSize.value=String(buf.length)
       if(resEl) resEl.textContent='SHA-256 e tamanho preenchidos automaticamente.'
-      return
+      return true
     }
     const st=sha256Init(); let total=0
     while(true){
@@ -212,8 +250,10 @@ async function autoFillFromUrl(){
     if(publish.elements.externalSha) publish.elements.externalSha.value=sha256Finish(st)
     if(publish.elements.externalSize) publish.elements.externalSize.value=String(total)
     if(resEl) resEl.textContent='SHA-256 e tamanho preenchidos automaticamente.'
+    return true
   }catch(e){
-    if(resEl) resEl.textContent='Não foi possível obter SHA-256/tamanho automaticamente (CORS ou bloqueio). Preencha manualmente. '+(e.message||'')
+    if(resEl) resEl.textContent='Não foi possível obter SHA-256/tamanho automaticamente (CORS/bloqueio). Abra "Avançado" para preencher manualmente. '+(e.message||'')
+    return false
   }
 }
 publish.elements.externalUrl?.addEventListener('change', autoFillFromUrl)
@@ -237,7 +277,13 @@ publish.onsubmit=async e=>{
   try{
     const args=Object.fromEntries(new FormData(publish));args.onProgress=t=>$('#publish-result').textContent=t
     args.file=null; args.files=null; args.assetId=null
-    args.externalUrl=args.externalUrl||null; args.externalSha=args.externalSha||null; args.externalSize=args.externalSize||null
+    args.externalUrl=args.externalUrl||null; args.externalSha=(args.externalSha||'').trim(); args.externalSize=(args.externalSize||'').trim()
+    if(args.externalUrl && (!args.externalSha || !args.externalSize)){
+      const ok=await autoFillFromUrl()
+      args.externalSha=publish.elements.externalSha?.value?.trim()||args.externalSha
+      args.externalSize=publish.elements.externalSize?.value?.trim()||args.externalSize
+      if(!ok || !args.externalSha || !args.externalSize) throw new Error('Não foi possível calcular SHA-256/tamanho automaticamente. Abra "Avançado" e preencha manualmente.')
+    }
     args.coverFile=publication==='game'&&publish.elements.coverFile?.files?.[0]?publish.elements.coverFile.files[0]:null
     args.backgroundFile=publication==='game'&&publish.elements.backgroundFile?.files?.[0]?publish.elements.backgroundFile.files[0]:null
     const isGame=publication==='game';const next=isGame?await client.publishGame(args):await client.publishUpdate(args)
@@ -315,6 +361,74 @@ function sha256Push(s,chunk){ const K=new Uint32Array([0x428a2f98,0x71374491,0xb
 }
 function sha256Finish(s){ const bitLen=s.total*8n; sha256Push(s,new Uint8Array([0x80])); while(s.len!==56) sha256Push(s,new Uint8Array([0])); const tail=new Uint8Array(8); for(let i=0;i<8;i++) tail[7-i]=Number((bitLen>>(BigInt(i)*8n))&0xffn); sha256Push(s,tail); let hex=''; for(let i=0;i<8;i++) hex+=s.h[i].toString(16).padStart(8,'0'); return hex; }
 async function sha256File(file,onProgress){ const st=sha256Init(); const step=4*1024*1024; for(let o=0;o<file.size;o+=step){ const chunk=new Uint8Array(await file.slice(o,Math.min(o+step,file.size)).arrayBuffer()); sha256Push(st,chunk); onProgress?.(`Calculando SHA-256… ${Math.round(Math.min(o+step,file.size)/file.size*100)}%`); } return sha256Finish(st); }
+
+function driveFileDirectUrl(id){ return 'https://drive.google.com/uc?export=download&confirm=t&id='+id }
+function renderDriveFolderEntries(kind, entries){
+  const box=$(`#${kind}-folder-list`), status=$(`#${kind}-folder-status`)
+  if(!box) return
+  box.replaceChildren()
+  if(!entries.length){ if(status) status.textContent='Nenhum arquivo/pasta encontrado na listagem pública. Verifique se a pasta está como “Qualquer pessoa com o link” ou cole o link direto do arquivo.'; return }
+  if(status) status.textContent=`${entries.length} item(ns) encontrado(s). Clique em “Publicar” para preencher o link.`
+  for(const e of entries){
+    const row=node('div',null,'hint')
+    const isFolder=/folder/i.test(e.mime||'')
+    const name=node('div', (isFolder?'📁 ':'📄 ')+e.name)
+    const btn=node('button','Publicar','outline'); btn.type='button'
+    btn.onclick=()=>{
+      if(!requireClient()){ feedback('Conecte o GitHub na aba Conexão para publicar.', true); return }
+      openPublish(kind==='library'?'game':'update')
+      const url=isFolder?driveFileDirectUrl(e.id):driveFileDirectUrl(e.id)
+      if(publish.elements.externalUrl) publish.elements.externalUrl.value=url
+      if(publish.elements.externalSha) publish.elements.externalSha.value=''
+      if(publish.elements.externalSize) publish.elements.externalSize.value=''
+      const baseName=e.name.replace(/\.(zip|xex)$/i,'')
+      if(kind==='library' && publish.elements.title && !publish.elements.title.value){ publish.elements.title.value=baseName; publish.elements.title.dispatchEvent(new Event('input')) }
+      if(kind==='updates' && publish.elements.notes && !publish.elements.notes.value){ publish.elements.notes.value=baseName }
+      const res=$('#publish-result')
+      if(res) res.textContent=isFolder?'Pasta selecionada: o link aponta para download da pasta no Drive. Confirme se o Drive gera um .zip direto; se não, publique o .zip do jogo. Calculando SHA-256/tamanho...':'Arquivo selecionado. Calculando SHA-256/tamanho...'
+      autoFillFromUrl()
+    }
+    const open=node('a','Abrir','outline'); open.href='https://drive.google.com/open?id='+e.id; open.target='_blank'; open.rel='noopener noreferrer'
+    const actions=node('div',null,'actions'); actions.append(btn,open)
+    row.append(name,actions)
+    box.append(row)
+  }
+}
+async function importDriveFolder(kind){
+  const input=$(`#${kind}-folder-url`)
+  const status=$(`#${kind}-folder-status`)
+  const url=(input?.value||'').trim() || (kind==='library'?DEFAULT_LIBRARY_FOLDER:DEFAULT_UPDATES_FOLDER)
+  if(input && !input.value) input.value=url
+  const open=$(`#${kind}-folder-open`); if(open){ const fid=driveFolderId(url); open.href=fid?('https://drive.google.com/drive/folders/'+fid):url }
+  try{
+    if(status) status.textContent='Lendo pasta pública do Drive...'
+    const {entries}=await fetchDriveFolder(url)
+    renderDriveFolderEntries(kind, entries)
+  }catch(e){
+    if(status) status.textContent='Não foi possível importar automaticamente ('+(e.message||'erro')+'). Abra a pasta, copie o link público do arquivo e cole no botão Publicar.'
+  }
+}
+function importDriveFolderLinks(kind){
+  const ta=$(`#${kind}-folder-links`), status=$(`#${kind}-folder-status`)
+  const lines=String(ta?.value||'').split(/\r?\n/).map(s=>s.trim()).filter(Boolean)
+  if(!lines.length){ if(status) status.textContent='Cole ao menos um link.'; return }
+  const entries=[]
+  for(const raw of lines){
+    const fileM=raw.match(/drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/) || raw.match(/[?&]id=([a-zA-Z0-9_-]+)/)
+    const folderM=raw.match(/drive\.google\.com\/drive\/folders\/([a-zA-Z0-9_-]+)/)
+    const id=folderM?.[1] || fileM?.[1] || ''
+    const isFolder=!!folderM && /\/folders\//.test(raw)
+    const nameGuess=decodeURIComponent((raw.split('/').pop()||'').split('?')[0]).replace(/[-_]+/g,' ').replace(/\.(zip|xex)$/i,'') || (id ? id.slice(0,12) : raw.slice(0,40))
+    entries.push({id: id||raw, name:nameGuess, mime:isFolder?'application/vnd.google-apps.folder':'', url:raw})
+  }
+  renderDriveFolderEntries(kind, entries.map(e=>e.id && /^[a-zA-Z0-9_-]{10,}$/.test(e.id)?e:{...e, name:e.name, mime:e.mime, _rawUrl:e.url}))
+}
+$('#library-folder-import') && ($('#library-folder-import').onclick=()=>importDriveFolder('library'))
+$('#updates-folder-import') && ($('#updates-folder-import').onclick=()=>importDriveFolder('updates'))
+$('#library-folder-import-links') && ($('#library-folder-import-links').onclick=()=>importDriveFolderLinks('library'))
+$('#updates-folder-import-links') && ($('#updates-folder-import-links').onclick=()=>importDriveFolderLinks('updates'))
+$('#library-folder-url')?.addEventListener('change', e=>{ const fid=driveFolderId(e.target.value); const a=$('#library-folder-open'); if(a) a.href=fid?('https://drive.google.com/drive/folders/'+fid):e.target.value })
+$('#updates-folder-url')?.addEventListener('change', e=>{ const fid=driveFolderId(e.target.value); const a=$('#updates-folder-open'); if(a) a.href=fid?('https://drive.google.com/drive/folders/'+fid):e.target.value })
 
 document.querySelectorAll('[data-close]').forEach(b=>b.onclick=()=>b.closest('dialog').close())
 document.querySelectorAll('[data-game]').forEach(b=>b.onclick=()=>openPublish('game'))

@@ -32,12 +32,32 @@
   <section id="biblioteca" class="view" hidden>
     <div class="page-title"><div><p class="kicker">Loja do Xbox 360</p><h1>Biblioteca</h1></div><button class="primary" data-game>＋ Publicar jogo</button></div>
     <p class="hint">Todos os jogos publicados no site aparecem aqui e na dashboard quando o feed do GitHub Pages atualizar.</p>
+    <div class="pane stack" id="library-drive-panel">
+      <h2>Pasta padrão da biblioteca (Google Drive)</h2>
+      <p class="hint">Pasta padrão: adicione seus .zip/.xex ou pastas de jogos nela, deixe como “Qualquer pessoa com o link” e importe aqui.</p>
+      <label>Pasta padrão<input id="library-folder-url" type="url" value="https://drive.google.com/drive/folders/1xNVtJi_8Rv48lANGjJBDjTBpmoZaPnvS?usp=sharing"></label>
+      <div class="actions"><button class="outline" type="button" id="library-folder-import">Importar da pasta</button><a class="outline" id="library-folder-open" href="https://drive.google.com/drive/folders/1xNVtJi_8Rv48lANGjJBDjTBpmoZaPnvS?usp=sharing" target="_blank" rel="noopener noreferrer">Abrir pasta</a></div>
+      <label>Ou cole links de arquivos/pastas (um por linha)<textarea id="library-folder-links" rows="3" placeholder="https://drive.google.com/file/d/...&#10;https://drive.google.com/uc?export=download&id=..."></textarea></label>
+      <div class="actions"><button class="outline" type="button" id="library-folder-import-links">Importar links colados</button></div>
+      <div id="library-folder-status" class="hint" role="status"></div>
+      <div id="library-folder-list" class="stack"></div>
+    </div>
     <div id="library-list"></div>
   </section>
   <section id="updates" class="view" hidden>
     <div class="page-title"><div><p class="kicker">Software do console</p><h1>Atualizações</h1></div><button class="primary" id="open-update">＋ Publicar build</button></div>
     <div class="pane"><p class="kicker">Canal estável</p><h2 id="release-title">Sem build publicada</h2><p id="release-notes"></p><dl class="metadata" id="release-meta"></dl></div>
     <p class="hint">Publique um pacote .zip com todos os arquivos da dash (ou um .xex) com o mesmo número de build usado na compilação. A dash consulta este canal enquanto está aberta.</p>
+    <div class="pane stack" id="updates-drive-panel">
+      <h2>Pasta padrão de atualizações (Google Drive)</h2>
+      <p class="hint">Pasta padrão: adicione .zip/.xex de atualização da dash nela, deixe como “Qualquer pessoa com o link” e importe aqui.</p>
+      <label>Pasta padrão<input id="updates-folder-url" type="url" value="https://drive.google.com/drive/folders/1MDYFD_Q6WDB17Jn1YGVIyrOjDqpe6q8p?usp=sharing"></label>
+      <div class="actions"><button class="outline" type="button" id="updates-folder-import">Importar da pasta</button><a class="outline" id="updates-folder-open" href="https://drive.google.com/drive/folders/1MDYFD_Q6WDB17Jn1YGVIyrOjDqpe6q8p?usp=sharing" target="_blank" rel="noopener noreferrer">Abrir pasta</a></div>
+      <label>Ou cole links de arquivos/pastas (um por linha)<textarea id="updates-folder-links" rows="3" placeholder="https://drive.google.com/file/d/...&#10;https://drive.google.com/uc?export=download&id=..."></textarea></label>
+      <div class="actions"><button class="outline" type="button" id="updates-folder-import-links">Importar links colados</button></div>
+      <div id="updates-folder-status" class="hint" role="status"></div>
+      <div id="updates-folder-list" class="stack"></div>
+    </div>
   </section>
   <section id="ideias" class="view" hidden>
     <div class="page-title"><div><p class="kicker">Desenvolvimento</p><h1>Ideias e chat</h1></div><button class="primary" id="new-idea">＋ Nova ideia</button></div>
@@ -64,9 +84,11 @@
   <input type="hidden" name="source" value="url">
   <div class="stack" id="url-source">
     <label>Link público do arquivo/pasta no Google Drive (ou URL HTTPS direta)<input name="externalUrl" type="url" placeholder="https://drive.google.com/... ou https://..." required></label>
-    <div class="pair"><label>SHA-256<input name="externalSha" placeholder="64 caracteres hex" required></label><label>Tamanho em bytes<input name="externalSize" type="number" min="1" required></label></div>
-    <div class="actions"><button class="outline" type="button" id="auto-fill-hash">Calcular SHA-256 e tamanho automaticamente</button></div>
-    <p class="hint">Cole o link público do arquivo no Drive e clique para preencher automaticamente. Se houver bloqueio CORS, preencha manualmente.</p>
+    <details class="hint"><summary style="cursor:pointer">Avançado: SHA-256 e tamanho (preenchido automaticamente)</summary>
+      <div class="pair" style="margin-top:8px"><label>SHA-256<input name="externalSha" placeholder="Calculado automaticamente"></label><label>Tamanho em bytes<input name="externalSize" type="number" min="1" placeholder="Calculado automaticamente"></label></div>
+      <div class="actions"><button class="outline" type="button" id="auto-fill-hash">Calcular SHA-256 e tamanho agora</button></div>
+    </details>
+    <p class="hint">Cole o link público do arquivo/pasta no Drive. O site tenta calcular SHA-256 e tamanho automaticamente ao publicar.</p>
   </div>
   <p role="status" class="hint" id="publish-result"></p><button class="primary" type="submit" id="publish-submit">Publicar no catálogo</button>
 </form></dialog>
