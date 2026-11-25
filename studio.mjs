@@ -27,6 +27,7 @@ function restore() {
   catch { return infer() }
 }
 let config = restore()
+try { githubTokenMem = localStorage.getItem('cards-studio-token') || '' } catch {}
 function validate(input) {
   const {owner, repo, branch, prefix} = input
   if (!/^[a-z\d-]+$/i.test(owner) || !/^[\w.-]+$/.test(repo) || /^\.+$/.test(repo)) throw Error('Informe a conta e o repositório do GitHub.')
@@ -43,12 +44,12 @@ function validate(input) {
 }
 function fillSettings(){
   for(const k of ['owner','repo','branch','prefix','baseUrl']) settings.elements[k].value = config[k] || (k === 'branch' ? 'main' : '')
-  document.querySelectorAll('.connection-label').forEach(x => x.textContent = client ? 'GitHub conectado' : 'Conectar GitHub')
+  document.querySelectorAll('.connection-label').forEach(x => x.textContent = client ? 'Conectado' : 'Conexão')
   $('.connectBtn').classList.toggle('connected',!!client)
 }
 function feedback(text='',error=false){const el=$('#feedback');el.textContent=text;el.hidden=!text;el.dataset.error=String(error)}
 function route(){
-  const key=location.hash.slice(1) in names ? location.hash.slice(1) : 'inicio'
+  let key=location.hash.slice(1); if(key==='catalogo') key='biblioteca'; if(!(key in names)) key='inicio'
   document.querySelectorAll('.view').forEach(s=>s.hidden=s.id!==key)
   document.querySelectorAll('.rail nav a').forEach(a=>{
     if(a.hash==='#'+key) a.setAttribute('aria-current','page'); else a.removeAttribute('aria-current')
@@ -124,77 +125,21 @@ function requireClient(){
   location.hash='conexao';feedback('Conecte a conta do GitHub para publicar neste repositório.');return false
 }
 function askConnect(){location.hash='conexao'}
-const VAULT_KEY='cards-studio-vault'
-const te=new TextEncoder(), td=new TextDecoder()
-const b64e=b=>btoa(String.fromCharCode(...new Uint8Array(b)))
-const b64d=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0))
-let vaultMemKey=null, githubTokenMem=''
-async function vaultDerive(pass,salt){
-  const base=await crypto.subtle.importKey('raw',te.encode(pass),'PBKDF2',false,['deriveKey'])
-  return crypto.subtle.deriveKey({name:'PBKDF2',salt,iterations:120000,hash:'SHA-256'},base,{name:'AES-GCM',length:256},false,['encrypt','decrypt'])
-}
-function vaultStatus(t){ const el=$('#vault-status'); if(el) el.textContent=t }
-function vaultData(){ return {config, token: settings.elements.token.value.trim() || githubTokenMem || '', driveClientId: drive.clientId || '', driveClientSecret: $('#drive-client-secret')?.value?.trim() || drive.clientSecret || '', driveRefreshToken: drive.refreshToken || '', driveFolders: {library:$('#drive-folder-library')?.value||'', updates:$('#drive-folder-updates')?.value||''}} }
-async function vaultPersist(){
-  if(!vaultMemKey) return
-  const iv=crypto.getRandomValues(new Uint8Array(12))
-  const ct=await crypto.subtle.encrypt({name:'AES-GCM',iv},vaultMemKey,te.encode(JSON.stringify(vaultData())))
-  const blob=JSON.parse(localStorage.getItem(VAULT_KEY)||'{}')
-  blob.v=1; blob.iv=b64e(iv); blob.ct=b64e(ct)
-  localStorage.setItem(VAULT_KEY, JSON.stringify(blob))
-  vaultStatus('Cofre salvo (criptografado).')
-}
-async function vaultUnlock(pass){
-  const blobStr=localStorage.getItem(VAULT_KEY)
-  if(!blobStr){
-    const salt=crypto.getRandomValues(new Uint8Array(16))
-    vaultMemKey=await vaultDerive(pass,salt)
-    localStorage.setItem(VAULT_KEY, JSON.stringify({v:1,salt:b64e(salt)}))
-    await vaultPersist()
-    vaultStatus('Cofre criado e desbloqueado.')
-    return
-  }
-  try{
-    const o=JSON.parse(blobStr)
-    vaultMemKey=await vaultDerive(pass,b64d(o.salt))
-    if(o.ct && o.iv){
-      const pt=await crypto.subtle.decrypt({name:'AES-GCM',iv:b64d(o.iv)},vaultMemKey,b64d(o.ct))
-      const data=JSON.parse(td.decode(pt))
-      if(data.config) config = { ...config, ...data.config }
-      if(data.driveClientId) { drive.clientId=data.driveClientId; const di=$('#drive-client-id'); if(di) di.value=drive.clientId; try{localStorage.setItem('cards-drive-client-id',drive.clientId)}catch{} }
-      if(data.driveClientSecret) { drive.clientSecret=data.driveClientSecret; const ds=$('#drive-client-secret'); if(ds) ds.value=drive.clientSecret }
-      if(data.driveRefreshToken) { drive.refreshToken = data.driveRefreshToken }
-      if(data.driveFolders){ if(data.driveFolders.library && $('#drive-folder-library')) $('#drive-folder-library').value=data.driveFolders.library; if(data.driveFolders.updates && $('#drive-folder-updates')) $('#drive-folder-updates').value=data.driveFolders.updates; try{localStorage.setItem('cards-drive-folders',JSON.stringify(data.driveFolders))}catch{} }
-      fillSettings(); draw()
-      if(drive.refreshToken && (!drive.token || Date.now() >= drive.expires - 60000)){
-        try{ await driveRefreshAccessToken(); driveStatus('Google Drive conectado (sessão restaurada).') }catch(e){ driveStatus('Drive: sessão salva, mas foi preciso reconectar. '+e.message) }
-      } else if(drive.token && Date.now() < drive.expires){ driveStatus('Google Drive conectado.') }
-      if(data.token){
-        githubTokenMem=data.token
-        try{ client=await connect({ ...validate(config), token:data.token }); feedback('Cofre desbloqueado e GitHub conectado.') }
-        catch(e){ client=null; feedback('Cofre desbloqueado, mas token GitHub falhou: '+e.message, true) }
-      } else { client=null; feedback('Cofre desbloqueado.') }
-    }
-    await vaultPersist()
-    vaultStatus('Desbloqueado.')
-  }catch(e){ vaultMemKey=null; vaultStatus('Senha incorreta ou cofre inválido.') }
-}
-$('#vault-form')?.addEventListener('submit', async e=>{ e.preventDefault(); const pass=$('#vault-pass').value; if(!pass){ vaultStatus('Digite uma senha.'); return } await vaultUnlock(pass) })
-$('#vault-lock')?.addEventListener('click', ()=>{ vaultMemKey=null; githubTokenMem=''; client=null; settings.elements.token.value=''; drive.token=null; drive.expires=0; drive.refreshToken=''; try{sessionStorage.removeItem('cards-drive-session')}catch{} vaultStatus('Bloqueado.'); fillSettings(); draw(); feedback('Sessão bloqueada.') })
+let githubTokenMem=''
 
 settings.addEventListener('submit',async e=>{
   e.preventDefault();const button=e.submitter;button.disabled=true
   try{
     const data=Object.fromEntries(new FormData(settings))
     const publicConfig=validate({owner:data.owner.trim(),repo:data.repo.trim(),branch:data.branch.trim(),prefix:data.prefix.trim().replace(/^\/+|\/+$/g,''),baseUrl:data.baseUrl.trim()})
-    const token=data.token.trim()
+    const token=(data.token||'').trim()
     const nextClient=token?await connect({...publicConfig,token}):null
     if(token) githubTokenMem=token
     settings.elements.token.value=''
     config=publicConfig;client=nextClient;pending=null;activeThread=0;threadVersion++;threadStamp=''
     try{ localStorage.setItem('cards-studio-source',JSON.stringify(config)) }catch{}
-    if(vaultMemKey) await vaultPersist()
-    feed=emptyFeed();fillSettings();draw();feedback(client?'GitHub conectado. Você já pode publicar.':'Endereço salvo. Você já pode gerar o arquivo do Xbox.')
+    try{ if(token) localStorage.setItem('cards-studio-token', token); else localStorage.removeItem('cards-studio-token') }catch{}
+    feed=emptyFeed();fillSettings();draw();feedback(client?'Configuração salva.':'Configuração salva. Adicione um token para publicar.')
     await refresh(true)
   }catch(err){feedback(err.message,true)}finally{button.disabled=false}
 })
@@ -220,27 +165,60 @@ function openPublish(kind,game=null){
   if(!isGame)publish.elements.build.value=Math.max(2,(feed.update?.build||1)+1)
   $('#publish-title').textContent=isGame?(editing?'Editar jogo':'Publicar jogo'):'Publicar atualização'
   $('#publish-type').textContent=isGame?'Catálogo do Xbox':'Software da dashboard'
-  $('#file-label').textContent=isGame?(editing?'Novo pacote (.xex/.zip) • deixe vazio para manter o atual':'Pacote do jogo (.xex ou .zip)'):'Pacote da dashboard (.zip com todos os arquivos, ou .xex)'
-  const fl=$('#folder-label'); if(fl) fl.textContent=isGame?'Pasta do jogo (será empacotada em .zip)':'Pasta completa da dash (será empacotada em .zip)'
+  if(publish.elements.source) publish.elements.source.value='url'
   $('#publish-submit').textContent=isGame?'Publicar no catálogo':'Publicar atualização automática'
-  $('#release-link').href='https://github.com/'+config.owner+'/'+config.repo+'/releases'
+  const rl=$('#release-link'); if(rl) rl.href='https://github.com/'+config.owner+'/'+config.repo+'/releases'
   $('#publish-result').textContent='';toggleSource(false);$('#publish-dialog').showModal()
 }
-function toggleSource(fetchAssets=true){
-  const src=publish.elements.source.value
-  const release=src==='release', folder=src==='folder', file=src==='file', url=src==='url'
-  $('#release-source').hidden=!release
-  $('#file-source').hidden=!file
-  const fs=$('#folder-source'); if(fs) fs.hidden=!folder
-  const us=$('#url-source'); if(us) us.hidden=!url
-  publish.elements.file.required=file&&!editing
-  if(publish.elements.folder) publish.elements.folder.required=folder&&!editing
-  publish.elements.assetId.required=release
-  if(publish.elements.externalUrl) publish.elements.externalUrl.required=url
-  if(publish.elements.externalSha) publish.elements.externalSha.required=url
-  if(publish.elements.externalSize) publish.elements.externalSize.required=url
-  if(release&&fetchAssets)loadAssets()
+function toggleSource(){
+  const us=$('#url-source'); if(us) us.hidden=false
+  if(publish.elements.externalUrl) publish.elements.externalUrl.required=true
+  if(publish.elements.externalSha) publish.elements.externalSha.required=true
+  if(publish.elements.externalSize) publish.elements.externalSize.required=true
 }
+
+function normalizePublicUrl(raw){
+  let u=String(raw||'').trim()
+  const m=u.match(/drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/) || u.match(/[?&]id=([a-zA-Z0-9_-]+)/)
+  if(m && /drive\.google\.com/.test(u)) u='https://drive.google.com/uc?export=download&confirm=t&id='+m[1]
+  return u
+}
+async function autoFillFromUrl(){
+  const urlRaw=publish.elements.externalUrl?.value?.trim(); if(!urlRaw) return
+  const url=normalizePublicUrl(urlRaw)
+  if(url!==urlRaw && publish.elements.externalUrl) publish.elements.externalUrl.value=url
+  const resEl=$('#publish-result')
+  try{
+    if(resEl) resEl.textContent='Obtendo tamanho e SHA-256...'
+    const r=await fetch(url, {mode:'cors'})
+    if(!r.ok) throw new Error('HTTP '+r.status)
+    const len=r.headers.get('content-length')
+    if(len && publish.elements.externalSize) publish.elements.externalSize.value=String(len)
+    const reader=r.body?.getReader?.()
+    if(!reader){
+      const buf=new Uint8Array(await r.arrayBuffer())
+      const sha=await hash(buf)
+      if(publish.elements.externalSha) publish.elements.externalSha.value=sha
+      if(publish.elements.externalSize) publish.elements.externalSize.value=String(buf.length)
+      if(resEl) resEl.textContent='SHA-256 e tamanho preenchidos automaticamente.'
+      return
+    }
+    const st=sha256Init(); let total=0
+    while(true){
+      const {done,value}=await reader.read(); if(done) break
+      sha256Push(st,value); total+=value.length
+      if(resEl) resEl.textContent='Calculando SHA-256... '+(total/1048576).toFixed(1)+' MiB'
+    }
+    if(publish.elements.externalSha) publish.elements.externalSha.value=sha256Finish(st)
+    if(publish.elements.externalSize) publish.elements.externalSize.value=String(total)
+    if(resEl) resEl.textContent='SHA-256 e tamanho preenchidos automaticamente.'
+  }catch(e){
+    if(resEl) resEl.textContent='Não foi possível obter SHA-256/tamanho automaticamente (CORS ou bloqueio). Preencha manualmente. '+(e.message||'')
+  }
+}
+publish.elements.externalUrl?.addEventListener('change', autoFillFromUrl)
+publish.elements.externalUrl?.addEventListener('paste', ()=>setTimeout(autoFillFromUrl, 50))
+$('#auto-fill-hash') && ($('#auto-fill-hash').onclick=()=>autoFillFromUrl())
 async function loadAssets(){
   const c=client
   try{
@@ -253,93 +231,23 @@ async function loadAssets(){
 }
 publish.elements.title.oninput=()=>{if(!slugEdited)publish.elements.slug.value=publish.elements.title.value.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,40)}
 publish.elements.slug.oninput=()=>{slugEdited=true}
-publish.elements.source.onchange=toggleSource;$('#reload-assets').onclick=loadAssets
+if(publish.elements.source) publish.elements.source.onchange=toggleSource; const ra=$('#reload-assets'); if(ra) ra.onclick=loadAssets
 publish.onsubmit=async e=>{
   e.preventDefault();const b=$('#publish-submit');b.disabled=true
   try{
     const args=Object.fromEntries(new FormData(publish));args.onProgress=t=>$('#publish-result').textContent=t
-    args.file=args.source==='file'?publish.elements.file.files[0]:null
-    args.files=args.source==='folder'?Array.from(publish.elements.folder.files||[]):null
-    args.assetId=args.source==='release'?args.assetId:null
-    args.externalUrl=args.source==='url'?args.externalUrl:null
-    args.externalSha=args.source==='url'?args.externalSha:null
-    args.externalSize=args.source==='url'?args.externalSize:null
-    args.coverFile=publication==='game'?publish.elements.coverFile.files[0]:null
-    args.backgroundFile=publication==='game'?publish.elements.backgroundFile.files[0]:null
-
-    // Drive-first: if Drive connected and local file/folder, upload to Drive automatically
-    const isLocal = args.source==='file' || args.source==='folder'
-    if(isLocal && (drive.token || drive.refreshToken)){
-      await driveEnsureToken()
-      const PART_THRESHOLD = 256 * 1024 * 1024
-      let name='package.zip'
-      let totalSha='', totalSize=0, parts=[]
-      if(args.source==='folder'){
-        const folderFiles = args.files.filter(f=>f && f.size>=0)
-        args.onProgress?.('Empacotando pasta em .zip…')
-        const mapped = folderFiles.map(f => ({ path: f.webkitRelativePath || f.name, arrayBuffer: () => f.arrayBuffer() }))
-        const bytes = await zipFiles(mapped, args.onProgress)
-        name = (args.slug || args.title || 'package').replace(/[^a-z0-9_-]+/gi,'-').replace(/^-|-$/g,'') + '.zip'
-        totalSize = bytes.length
-        args.onProgress?.('Calculando SHA-256…')
-        totalSha = await hash(bytes)
-        if(bytes.length > PART_THRESHOLD){
-          // split bytes into parts
-          const partCount = Math.ceil(bytes.length / PART_THRESHOLD)
-          let off = 0
-          for(let i=0;i<partCount;i++){
-            const end = Math.min(off+PART_THRESHOLD, bytes.length)
-            const chunk = bytes.slice(off, end)
-            const psha = await hash(chunk)
-            const up = await driveUploadBytes(`${name}.part${i}`, chunk, 'application/octet-stream', (t)=>args.onProgress?.(`Parte ${i+1}/${partCount}: ${t}`))
-            parts.push({ url: up.url, sha256: psha, size: chunk.length })
-            off = end
-          }
-        } else {
-          const up = await driveUploadBytes(name, bytes, 'application/octet-stream', args.onProgress)
-          args.externalUrl = up.url
-        }
-      } else {
-        const f = args.file
-        if(!f) throw new Error('Selecione um arquivo.')
-        const head = new Uint8Array(await f.slice(0,4).arrayBuffer())
-        const zip = isZip(head), xex = isXex(head)
-        if(!zip && !xex) throw new Error('Envie um .xex válido ou um pacote .zip.')
-        const ext = zip ? '.zip' : '.xex'
-        name = (f.name || ('package'+ext)).replace(/[^\w.\-]+/g,'_')
-        totalSize = f.size
-        if(f.size > PART_THRESHOLD){
-          const r = await driveUploadFileInParts(f, name, PART_THRESHOLD, args.onProgress)
-          totalSha = r.sha256; totalSize = r.size; parts = r.parts
-        } else {
-          args.onProgress?.('Lendo arquivo e calculando SHA-256…')
-          const bytes = new Uint8Array(await f.arrayBuffer())
-          totalSha = await hash(bytes)
-          const up = await driveUploadBytes(name, bytes, 'application/octet-stream', args.onProgress)
-          args.externalUrl = up.url
-        }
-      }
-      if(parts.length){
-        // use first part url as main url for backward compat, include parts
-        args.externalUrl = parts[0].url
-        args.parts = parts
-      }
-      args.source = 'url'
-      args.externalSha = totalSha
-      args.externalSize = String(totalSize)
-      args.file = null; args.files = null
-      args.onProgress?.('Arquivo no Drive. Publicando no catálogo…')
-    }
-
+    args.file=null; args.files=null; args.assetId=null
+    args.externalUrl=args.externalUrl||null; args.externalSha=args.externalSha||null; args.externalSize=args.externalSize||null
+    args.coverFile=publication==='game'&&publish.elements.coverFile?.files?.[0]?publish.elements.coverFile.files[0]:null
+    args.backgroundFile=publication==='game'&&publish.elements.backgroundFile?.files?.[0]?publish.elements.backgroundFile.files[0]:null
     const isGame=publication==='game';const next=isGame?await client.publishGame(args):await client.publishUpdate(args)
     ++readVersion;feed=next
     const entry=isGame?next.games.find(g=>g.slug===args.slug):next.update
     pending={slug:isGame?args.slug:'',value:JSON.stringify(entry),deadline:Date.now()+600000}
-    draw();$('#publish-dialog').close();location.hash=isGame?'catalogo':'updates'
-    feedback('Publicação salva. Arquivo no Drive e feed atualizado no GitHub.')
+    draw();$('#publish-dialog').close();location.hash=isGame?'biblioteca':'updates'
+    feedback('Publica??o salva no cat?logo.')
   }catch(err){$('#publish-result').textContent=err.message}finally{b.disabled=false}
 }
-function clean(text){return text.replace(/<!--\s*\/?dash:[\s\S]*?-->/g,'').trim()}
 const ideaTitle=s=>s.replace(/^\[Ideia\]\s*/,'')
 async function loadIdeas(){
   const box=$('#idea-list'), c=client
@@ -384,10 +292,7 @@ ideaForm.onsubmit=async e=>{
   try{const issue=await client.submitIdea({title:ideaForm.elements.title.value,body:ideaForm.elements.body.value,chat:ideaForm.elements.chat.checked});$('#idea-dialog').close();await openThread(issue.number);feedback('Ideia publicada no GitHub.')}
   catch(err){$('#idea-result').textContent=err.message}finally{b.disabled=false}
 }
-// --- Google Drive OAuth 2.0 (PKCE) ---
-const drive = { token:null, expires:0, refreshToken:'', clientId: localStorage.getItem('cards-drive-client-id') || '654689610968-fe4ho0kk0ppm8gnvuq0tookk9llrkobd.apps.googleusercontent.com', clientSecret:'' }
-try{ const ds=JSON.parse(sessionStorage.getItem('cards-drive-session')||'null'); if(ds?.token){ drive.token=ds.token; drive.expires=ds.expires||0 } }catch{}
-const driveStatus = (t)=>{ const el=$('#drive-status'); if(el) el.textContent=t }
+// Init
 const b64url = (buf)=>btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'')
 async function pkce(){
   const v = crypto.getRandomValues(new Uint8Array(64)); const verifier=b64url(v)
@@ -395,77 +300,6 @@ async function pkce(){
   return { verifier, challenge: b64url(digest) }
 }
 function driveRedirect(){ return location.origin + location.pathname }
-function saveDriveClientId(){ drive.clientId = ($('#drive-client-id')?.value || '').trim(); drive.clientSecret = ($('#drive-client-secret')?.value || '').trim(); try{ localStorage.setItem('cards-drive-client-id', drive.clientId) }catch{} }
-async function driveConnect(){
-  saveDriveClientId()
-  if(!drive.clientId) { driveStatus('Informe o Google OAuth Client ID.'); return }
-  if(!drive.clientSecret) { driveStatus('Informe o Google OAuth Client Secret (salvo no cofre).'); return }
-  if(!vaultMemKey){ driveStatus('Desbloqueie/crie o cofre local primeiro para salvar o login do Drive.'); $('#vault-pass')?.focus(); return }
-  const {verifier, challenge} = await pkce()
-  const state = b64url(crypto.getRandomValues(new Uint8Array(16)))
-  sessionStorage.setItem('drive_pkce_verifier', verifier)
-  sessionStorage.setItem('drive_pkce_state', state)
-  const params = new URLSearchParams({
-    client_id: drive.clientId, redirect_uri: driveRedirect(), response_type:'code',
-    scope:'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive.readonly',
-    access_type:'offline', include_granted_scopes:'true', state, code_challenge:challenge, code_challenge_method:'S256', prompt:'consent'
-  })
-  location.href = 'https://accounts.google.com/o/oauth2/v2/auth?' + params.toString()
-}
-function driveSaveSession(){
-  try{ sessionStorage.setItem('cards-drive-session', JSON.stringify({token:drive.token, expires:drive.expires})) }catch{}
-}
-async function driveRefreshAccessToken(){
-  if(!drive.refreshToken) throw new Error('Conecte o Google Drive novamente.')
-  const body = new URLSearchParams({ client_id: drive.clientId, grant_type:'refresh_token', refresh_token: drive.refreshToken })
-  if(drive.clientSecret) body.set('client_secret', drive.clientSecret)
-  const r = await fetch('https://oauth2.googleapis.com/token', { method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body })
-  const j = await r.json()
-  if(!r.ok){ drive.refreshToken=''; throw new Error(j.error_description || j.error || 'Falha ao renovar sessão do Drive') }
-  drive.token = j.access_token; drive.expires = Date.now() + (j.expires_in||3600)*1000
-  if(j.refresh_token) drive.refreshToken = j.refresh_token
-  driveSaveSession()
-  if(vaultMemKey) await vaultPersist()
-}
-async function driveEnsureToken(){
-  if(drive.token && Date.now() < drive.expires - 60000) return
-  if(drive.refreshToken){ await driveRefreshAccessToken(); return }
-  throw new Error('Conecte o Google Drive novamente.')
-}
-async function driveExchange(code){
-  const verifier = sessionStorage.getItem('drive_pkce_verifier') || ''
-  const body = new URLSearchParams({ client_id: drive.clientId, grant_type:'authorization_code', code, redirect_uri: driveRedirect(), code_verifier: verifier })
-  if(drive.clientSecret) body.set('client_secret', drive.clientSecret)
-  const r = await fetch('https://oauth2.googleapis.com/token', { method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body })
-  const j = await r.json()
-  if(!r.ok) throw new Error(j.error_description || j.error || 'Falha OAuth')
-  drive.token = j.access_token; drive.expires = Date.now() + (j.expires_in||3600)*1000
-  if(j.refresh_token) drive.refreshToken = j.refresh_token
-  driveSaveSession()
-  sessionStorage.removeItem('drive_pkce_verifier'); sessionStorage.removeItem('drive_pkce_state')
-  if(vaultMemKey) { await vaultPersist(); driveStatus('Google Drive conectado e salvo no cofre.') }
-  else { driveStatus('Google Drive conectado, mas desbloqueie o cofre e salve para manter o login após fechar o navegador.') }
-}
-async function driveHandleCallback(){
-  const p = new URLSearchParams(location.search)
-  const code = p.get('code'), state = p.get('state'), err = p.get('error')
-  if(err) { driveStatus('OAuth erro: '+err); return }
-  if(!code) return
-  const expected = sessionStorage.getItem('drive_pkce_state')
-  if(expected && state !== expected) { driveStatus('Estado OAuth inválido.'); return }
-  try { await driveExchange(code) } catch(e){ driveStatus(e.message) }
-  history.replaceState({}, document.title, location.pathname + location.hash)
-}
-function driveAuthHeader(){ if(!drive.token || Date.now()>=drive.expires) throw new Error('Conecte o Google Drive novamente.'); return { Authorization: 'Bearer ' + drive.token } }
-async function driveMakePublic(fileId){
-  await driveEnsureToken()
-  const r = await fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}/permissions`, {
-    method:'POST', headers:{ ...driveAuthHeader(), 'Content-Type':'application/json' },
-    body: JSON.stringify({ role:'reader', type:'anyone' })
-  })
-  if(!r.ok){ let msg='Falha ao tornar arquivo público'; try{ const j=await r.json(); msg=j.error?.message||msg }catch{} throw new Error(msg) }
-}
-function driveDirectUrl(fileId){ return `https://drive.google.com/uc?export=download&confirm=t&id=${fileId}` }
 // Incremental SHA-256 for large files
 function sha256Init(){ const h=new Uint32Array([0x6a09e667,0xbb67ae85,0x3c6ef372,0xa54ff53a,0x510e527f,0x9b05688c,0x1f83d9ab,0x5be0cd19]); return {h,buf:new Uint8Array(64),len:0,total:0n}; }
 function sha256Push(s,chunk){ const K=new Uint32Array([0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2]);
@@ -482,222 +316,12 @@ function sha256Push(s,chunk){ const K=new Uint32Array([0x428a2f98,0x71374491,0xb
 function sha256Finish(s){ const bitLen=s.total*8n; sha256Push(s,new Uint8Array([0x80])); while(s.len!==56) sha256Push(s,new Uint8Array([0])); const tail=new Uint8Array(8); for(let i=0;i<8;i++) tail[7-i]=Number((bitLen>>(BigInt(i)*8n))&0xffn); sha256Push(s,tail); let hex=''; for(let i=0;i<8;i++) hex+=s.h[i].toString(16).padStart(8,'0'); return hex; }
 async function sha256File(file,onProgress){ const st=sha256Init(); const step=4*1024*1024; for(let o=0;o<file.size;o+=step){ const chunk=new Uint8Array(await file.slice(o,Math.min(o+step,file.size)).arrayBuffer()); sha256Push(st,chunk); onProgress?.(`Calculando SHA-256… ${Math.round(Math.min(o+step,file.size)/file.size*100)}%`); } return sha256Finish(st); }
 
-async function driveUploadFileResumable(file, name, mime='application/octet-stream', onProgress){
-  await driveEnsureToken()
-  const size = file.size
-  const startRes = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&fields=id,name,size', {
-    method:'POST', headers:{ ...driveAuthHeader(), 'Content-Type':'application/json; charset=UTF-8', 'X-Upload-Content-Type': mime, 'X-Upload-Content-Length': String(size) },
-    body: JSON.stringify({ name })
-  })
-  if(!startRes.ok){ let msg='Falha ao iniciar upload no Drive'; try{ const j=await startRes.json(); msg=j.error?.message||msg }catch{} throw new Error(msg) }
-  const sessionUrl = startRes.headers.get('Location')
-  if(!sessionUrl) throw new Error('Drive não retornou sessão de upload.')
-  const chunkSize = 8 * 1024 * 1024
-  let offset = 0, result = null
-  while(offset < size){
-    const end = Math.min(offset + chunkSize, size)
-    const chunk = await file.slice(offset, end).arrayBuffer()
-    onProgress?.(`Enviando para o Drive… ${Math.round(end/size*100)}%`)
-    const r = await fetch(sessionUrl, { method:'PUT', headers:{ 'Content-Length': String(end-offset), 'Content-Range': `bytes ${offset}-${end-1}/${size}` }, body: chunk })
-    if(r.status === 308){ offset = end; continue }
-    if(!r.ok){ let msg='Falha no upload do Drive'; try{ const j=await r.json(); msg=j.error?.message||msg }catch{} throw new Error(msg) }
-    try{ result = await r.json() }catch{ result = { id: null } }
-    offset = end
-  }
-  if(!result?.id) throw new Error('Upload no Drive concluído sem ID.')
-  onProgress?.('Tornando arquivo público no Drive…')
-  await driveMakePublic(result.id)
-  return { id: result.id, name: result.name || name, url: driveDirectUrl(result.id), size }
-}
-async function driveUploadFileInParts(file, baseName, partSize, onProgress){
-  const totalSize = file.size
-  const totalHash = sha256Init()
-  const parts = []
-  const partCount = Math.ceil(totalSize / partSize)
-  for(let i=0, offset=0; offset < totalSize; i++){
-    const end = Math.min(offset + partSize, totalSize)
-    const blob = file.slice(offset, end)
-    // hash part
-    const ph = sha256Init()
-    const step = 4 * 1024 * 1024
-    for(let o=0; o<blob.size; o+=step){
-      const chunk = new Uint8Array(await blob.slice(o, Math.min(o+step, blob.size)).arrayBuffer())
-      sha256Push(ph, chunk); sha256Push(totalHash, chunk)
-    }
-    const partSha = sha256Finish(ph)
-    const partName = `${baseName}.part${i}`
-    onProgress?.(`Enviando parte ${i+1}/${partCount} para o Drive…`)
-    const up = await driveUploadFileResumable(new File([blob], partName, {type:'application/octet-stream'}), partName, 'application/octet-stream', (t)=>onProgress?.(`Parte ${i+1}/${partCount}: ${t}`))
-    parts.push({ url: up.url, sha256: partSha, size: blob.size })
-    offset = end
-  }
-  return { sha256: sha256Finish(totalHash), size: totalSize, parts }
-}
-async function driveUploadBytes(name, bytes, mime='application/octet-stream', onProgress){
-  await driveEnsureToken()
-  // Resumable upload for reliability/large files
-  const size = bytes.byteLength || bytes.length
-  const startRes = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&fields=id,name,size', {
-    method:'POST', headers:{ ...driveAuthHeader(), 'Content-Type':'application/json; charset=UTF-8', 'X-Upload-Content-Type': mime, 'X-Upload-Content-Length': String(size) },
-    body: JSON.stringify({ name })
-  })
-  if(!startRes.ok){ let msg='Falha ao iniciar upload no Drive'; try{ const j=await startRes.json(); msg=j.error?.message||msg }catch{} throw new Error(msg) }
-  const sessionUrl = startRes.headers.get('Location')
-  if(!sessionUrl) throw new Error('Drive não retornou sessão de upload.')
-  const chunkSize = 8 * 1024 * 1024 // 8 MiB, multiple of 256 KiB
-  let offset = 0
-  let result = null
-  while(offset < size){
-    const end = Math.min(offset + chunkSize, size)
-    const chunk = bytes.slice(offset, end)
-    onProgress?.(`Enviando para o Drive… ${Math.round(end/size*100)}%`)
-    const r = await fetch(sessionUrl, { method:'PUT', headers:{ 'Content-Length': String(chunk.length), 'Content-Range': `bytes ${offset}-${end-1}/${size}` }, body: chunk })
-    if(r.status === 308){ offset = end; continue }
-    if(!r.ok){ let msg='Falha no upload do Drive'; try{ const j=await r.json(); msg=j.error?.message||msg }catch{} throw new Error(msg) }
-    result = await r.json()
-    offset = end
-  }
-  if(!result?.id) throw new Error('Upload no Drive concluído sem ID.')
-  onProgress?.('Tornando arquivo público no Drive…')
-  await driveMakePublic(result.id)
-  return { id: result.id, name: result.name || name, url: driveDirectUrl(result.id), size }
-}
-async function driveList(){
-  try{
-    saveDriveClientId()
-    await driveEnsureToken()
-    const r = await fetch('https://www.googleapis.com/drive/v3/files?pageSize=20&fields=files(id,name,mimeType,size,webViewLink,webContentLink)&q=trashed=false', { headers: driveAuthHeader() })
-    const j = await r.json(); if(!r.ok) throw new Error(j.error?.message || 'Falha ao listar')
-    const box=$('#drive-files'); box.replaceChildren()
-    if(!j.files?.length){ box.textContent='Nenhum arquivo encontrado.'; return }
-    for(const f of j.files){
-      const row=node('div',null,'hint')
-      const use=node('button','Usar no catálogo','outline'); use.type='button'
-      use.onclick=()=>{
-        const u=driveDirectUrl(f.id)
-        navigator.clipboard?.writeText(u)
-        const dlg=$('#publish-dialog')
-        if(dlg?.open && publish.elements.source){
-          publish.elements.source.value='url'; toggleSource(false)
-          if(publish.elements.externalUrl) publish.elements.externalUrl.value=u
-          if(publish.elements.externalSize && f.size) publish.elements.externalSize.value=String(f.size)
-          if(publish.elements.externalSha) publish.elements.externalSha.focus()
-          feedback('Link do Drive preenchido no diálogo. Informe o SHA-256 para publicar.')
-        } else {
-          openPublish('game')
-          publish.elements.source.value='url'; toggleSource(false)
-          if(publish.elements.externalUrl) publish.elements.externalUrl.value=u
-          if(publish.elements.externalSize && f.size) publish.elements.externalSize.value=String(f.size)
-          if(publish.elements.title && !publish.elements.title.value) publish.elements.title.value=f.name.replace(/\.(xex|zip)$/i,'')
-          publish.elements.title?.dispatchEvent(new Event('input'))
-          feedback('Arquivo do Drive selecionado. Preencha os dados e o SHA-256 para publicar.')
-        }
-      }
-      row.append(node('div', `${f.name} (${f.size||'?'} bytes)`), use)
-      box.append(row)
-    }
-  }catch(e){ driveStatus(e.message) }
-}
-async function driveUpload(){
-  try{
-    saveDriveClientId()
-    const inp=$('#drive-upload-file'); const f=inp?.files?.[0]
-    if(!f) { driveStatus('Selecione um arquivo para enviar.'); return }
-    driveStatus('Enviando para o Drive...')
-    const up = await driveUploadFileResumable(f, f.name, f.type || 'application/octet-stream', driveStatus)
-    driveStatus('Enviado e público: '+up.name+' — '+up.url)
-    await driveList()
-  }catch(e){ driveStatus(e.message) }
-}
-if($('#drive-client-id')) $('#drive-client-id').value = drive.clientId
-$('#drive-connect') && ($('#drive-connect').onclick=()=>driveConnect().catch(e=>driveStatus(e.message)))
-$('#drive-disconnect') && ($('#drive-disconnect').onclick=()=>{ drive.token=null; drive.expires=0; drive.refreshToken=''; try{sessionStorage.removeItem('cards-drive-session')}catch{} if(vaultMemKey) vaultPersist(); driveStatus('Drive desconectado.') })
-$('#drive-list') && ($('#drive-list').onclick=driveList)
-$('#drive-upload') && ($('#drive-upload').onclick=driveUpload)
-function parseDriveFolderId(v){
-  const s=String(v||'').trim()
-  const m=s.match(/folders\/([a-zA-Z0-9_-]+)/) || s.match(/[?&]id=([a-zA-Z0-9_-]+)/) || (/^[a-zA-Z0-9_-]{10,}$/.test(s) ? [null,s] : null)
-  return m?m[1]:''
-}
-async function driveListFolder(folderId){
-  await driveEnsureToken()
-  const q = `'${folderId}' in parents and trashed=false and (mimeType='application/x-msdos-program' or mimeType='application/zip' or mimeType='application/octet-stream' or name contains '.xex' or name contains '.zip')`
-  const r = await fetch(`https://www.googleapis.com/drive/v3/files?pageSize=50&fields=files(id,name,mimeType,size,modifiedTime)&q=${encodeURIComponent(q)}&orderBy=modifiedTime desc`, { headers: driveAuthHeader() })
-  const j = await r.json(); if(!r.ok) throw new Error(j.error?.message||'Falha ao listar pasta')
-  return j.files||[]
-}
-function driveSaveFolders(){ try{ localStorage.setItem('cards-drive-folders', JSON.stringify({library:$('#drive-folder-library')?.value||'', updates:$('#drive-folder-updates')?.value||''})) }catch{} }
-try{ const df=JSON.parse(localStorage.getItem('cards-drive-folders')||'{}'); if(df.library && $('#drive-folder-library')) $('#drive-folder-library').value=df.library; if(df.updates && $('#drive-folder-updates')) $('#drive-folder-updates').value=df.updates }catch{}
-async function driveSyncFolder(kind){
-  const input = kind==='library' ? $('#drive-folder-library') : $('#drive-folder-updates')
-  const folderId = parseDriveFolderId(input?.value)
-  if(!folderId){ driveStatus('Informe o ID/link da pasta do Drive.'); return }
-  driveSaveFolders()
-  driveStatus('Lendo pasta do Drive...')
-  try{
-    const files = await driveListFolder(folderId)
-    const box = $('#drive-files'); box.replaceChildren()
-    if(!files.length){ box.textContent='Nenhum .xex/.zip encontrado na pasta.'; driveStatus('Pasta lida, sem arquivos compatíveis.'); return }
-    driveStatus(`${files.length} arquivo(s) encontrado(s) na pasta ${kind==='library'?'Biblioteca':'Atualizações'}.`)
-    for(const f of files){
-      const row=node('div',null,'hint')
-      const btn=node('button', kind==='library'?'Publicar jogo':'Publicar atualização','outline'); btn.type='button'
-      btn.onclick=async ()=>{
-        openPublish(kind==='library'?'game':'update')
-        publish.elements.source.value='url'; toggleSource(false)
-        if(publish.elements.externalUrl) publish.elements.externalUrl.value = driveDirectUrl(f.id)
-        if(publish.elements.externalSize && f.size) publish.elements.externalSize.value = String(f.size)
-        if(kind==='library'){ if(publish.elements.title && !publish.elements.title.value) publish.elements.title.value=f.name.replace(/\.(xex|zip)$/i,''); publish.elements.title?.dispatchEvent(new Event('input')) }
-        if(publish.elements.externalSha){ publish.elements.externalSha.value=''; publish.elements.externalSha.focus() }
-        feedback('Arquivo do Drive selecionado. Calculando SHA-256...')
-        try{
-          const sizeNum = Number(f.size||0)
-          if(sizeNum > 256*1024*1024) throw new Error('big')
-          await driveEnsureToken()
-          const r = await fetch(`https://www.googleapis.com/drive/v3/files/${f.id}?alt=media`, { headers: driveAuthHeader() })
-          if(!r.ok) throw new Error('download')
-          const buf = new Uint8Array(await r.arrayBuffer())
-          const sha = await hash(buf)
-          if(publish.elements.externalSha) publish.elements.externalSha.value = sha
-          if(publish.elements.externalSize) publish.elements.externalSize.value = String(buf.length)
-          feedback('SHA-256 calculado. Revise e publique.')
-        }catch{ feedback('Arquivo selecionado. Preencha o SHA-256 (para arquivos grandes, calcule localmente) e publique.') }
-      }
-      row.append(node('div', `${f.name} (${f.size?Math.round(f.size/1048576)+' MiB':'?'} )`), btn)
-      box.append(row)
-    }
-  }catch(e){ driveStatus(e.message) }
-}
-$('#drive-sync-library') && ($('#drive-sync-library').onclick=()=>driveSyncFolder('library'))
-$('#drive-sync-updates') && ($('#drive-sync-updates').onclick=()=>driveSyncFolder('updates'))
-
-$('#pick-drive-file') && ($('#pick-drive-file').onclick=async ()=>{
-  const box=$('#drive-picker'); if(!box) return; box.hidden=false; box.textContent='Carregando...'
-  try{
-    saveDriveClientId()
-    await driveEnsureToken()
-    const r = await fetch('https://www.googleapis.com/drive/v3/files?pageSize=20&fields=files(id,name,mimeType,size)&q=trashed=false', { headers: driveAuthHeader() })
-    const j = await r.json(); if(!r.ok) throw new Error(j.error?.message||'Falha ao listar')
-    box.replaceChildren()
-    if(!j.files?.length){ box.textContent='Nenhum arquivo no Drive.'; return }
-    for(const f of j.files){
-      const b=node('button', `${f.name} (${f.size||'?'} bytes)`, 'outline'); b.type='button'
-      b.onclick=()=>{ if(publish.elements.externalUrl) publish.elements.externalUrl.value = driveDirectUrl(f.id); if(publish.elements.externalSize && f.size) publish.elements.externalSize.value=String(f.size); box.hidden=true; feedback('Arquivo do Drive selecionado. Informe o SHA-256.') }
-      box.append(b)
-    }
-  }catch(e){ box.textContent=e.message }
-})
-driveHandleCallback()
-if(drive.token && Date.now() < drive.expires) driveStatus('Google Drive conectado.')
-else if(drive.refreshToken) driveStatus('Drive: sessão salva, será renovada ao usar.')
-else if(localStorage.getItem(VAULT_KEY)) driveStatus('Drive: desbloqueie o cofre para restaurar a sessão salva.')
-
 document.querySelectorAll('[data-close]').forEach(b=>b.onclick=()=>b.closest('dialog').close())
 document.querySelectorAll('[data-game]').forEach(b=>b.onclick=()=>openPublish('game'))
-document.querySelectorAll('.connectBtn').forEach(b=>b.onclick=askConnect)
-$('#open-update').onclick=()=>openPublish('update');$('#query').oninput=draw
+document.querySelectorAll('.connectBtn').forEach(b=>b.onclick=()=>{location.hash='#conexao'})
+$('#open-update').onclick=()=>openPublish('update'); const q=$('#query'); if(q) q.oninput=draw
 window.addEventListener('hashchange',route)
 fillSettings();draw();route();refresh()
-if(localStorage.getItem(VAULT_KEY)) vaultStatus('Cofre encontrado. Digite a senha para desbloquear.')
+try{ const t=localStorage.getItem('cards-studio-token'); if(t){ githubTokenMem=t; connect({...validate(config),token:t}).then(c=>{client=c;fillSettings();draw();refresh(true)}).catch(()=>{}) } }catch{}
 setInterval(()=>{if(!document.hidden)refresh(true)},60000)
 setInterval(()=>{if(!document.hidden && client && location.hash==='#ideias' && activeThread && !$('#thread textarea:focus'))openThread(activeThread,true)},12000)
