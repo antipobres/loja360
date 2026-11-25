@@ -68,10 +68,12 @@
     <div class="actions"><button class="primary" type="submit">Salvar conexão</button><button class="outline" type="button" id="disconnect">Desconectar conta</button></div></form>
     <div class="pane setup"><h2>Conectar a dashboard</h2><p>Gere o arquivo e copie para <code>assets/store-site.ini</code> da dash no Xbox. Depois, jogos e builds vêm do site.</p><button class="outline" id="download-config">Baixar store-site.ini</button></div>
     <div class="pane stack" id="drive-pane"><h2>Google Drive</h2>
-      <p class="hint">Conecte o Google Drive para importar arquivos no catálogo e enviar pacotes. Use OAuth 2.0 (PKCE) com um Client ID do Google Cloud.</p>
+      <p class="hint">Conecte o Google Drive para importar arquivos no catálogo e enviar pacotes. A sessão é renovada automaticamente (refresh token salvo no cofre criptografado).</p>
       <label>Google OAuth Client ID<input name="driveClientId" id="drive-client-id" placeholder="xxxx.apps.googleusercontent.com" autocomplete="off"></label>
       <div class="actions"><button class="outline" type="button" id="drive-connect">Conectar Google Drive</button><button class="outline" type="button" id="drive-disconnect">Desconectar</button></div>
       <p class="hint" id="drive-status">Drive não conectado.</p>
+      <div class="pair"><label>ID/link da pasta Biblioteca no Drive<input id="drive-folder-library" placeholder="ID da pasta ou link do Drive"></label><button class="outline" type="button" id="drive-sync-library">Puxar Biblioteca</button></div>
+      <div class="pair"><label>ID/link da pasta Atualizações no Drive<input id="drive-folder-updates" placeholder="ID da pasta ou link do Drive"></label><button class="outline" type="button" id="drive-sync-updates">Puxar Atualizações</button></div>
       <div class="pair"><label>Enviar arquivo para o Drive<input type="file" id="drive-upload-file"></label><button class="outline" type="button" id="drive-upload">Enviar para Drive</button></div>
       <div class="actions"><button class="outline" type="button" id="drive-list">Listar arquivos do Drive</button></div>
       <div id="drive-files" class="hint"></div>
@@ -81,7 +83,7 @@
 </main>
 <dialog id="publish-dialog" aria-labelledby="publish-title"><form class="stack" id="publish-form">
   <button type="button" class="close" data-close aria-label="Fechar">×</button><p class="kicker" id="publish-type"></p><h2 id="publish-title">Publicar jogo</h2>
-  <div id="game-fields" class="stack"><label>Título<input name="title" maxlength="80" required></label><div class="pair"><label>Identificador<input name="slug" maxlength="40" pattern="[a-z0-9-]+" required></label><label>Gênero<input name="genre" maxlength="48" required></label></div><label>Descrição<textarea name="description" rows="2" maxlength="320" required></textarea></label><label>Capa opcional • PNG ou JPG<input type="file" accept="image/png,image/jpeg" name="coverFile"></label></div>
+  <div id="game-fields" class="stack"><label>Título<input name="title" maxlength="80" required></label><div class="pair"><label>Identificador<input name="slug" maxlength="40" pattern="[a-z0-9-]+" required></label><label>Gênero<input name="genre" maxlength="48" required></label></div><label>Descrição<textarea name="description" rows="2" maxlength="320" required></textarea></label><label>Capa opcional • PNG ou JPG<input type="file" accept="image/png,image/jpeg" name="coverFile"></label><label>Fundo opcional • PNG ou JPG<input type="file" accept="image/png,image/jpeg" name="backgroundFile"></label></div>
   <div id="update-fields" class="stack" hidden><label>Número da build<input name="build" type="number" min="1" max="2147483647"></label><label>Notas da versão<textarea name="notes" rows="2" maxlength="320"></textarea></label></div>
   <label>Origem do arquivo<select name="source"><option value="file">Arquivo .xex ou .zip</option><option value="folder">Pasta completa (empacota em .zip)</option><option value="release">Arquivo de uma Release do GitHub</option><option value="url">URL externa / Google Drive</option></select></label>
   <label id="file-source"><span id="file-label">Pacote do jogo (.xex ou .zip)</span><input name="file" type="file" accept=".xex,.zip"></label>

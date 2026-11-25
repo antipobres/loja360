@@ -81,6 +81,7 @@ function game(v) {
   const item = { slug: slug(v.slug), title: field(v.title, 80, 'Título'), genre: field(v.genre, 48, 'Gênero'),
     description: field(v.description, 320, 'Descrição'), ...pkg(v) }
   if (v.cover) { https(v.cover); item.cover = v.cover }
+  if (v.background) { https(v.background); item.background = v.background }
   return item
 }
 
@@ -115,7 +116,7 @@ export function readFeed(text) {
   for (const [name, data] of sections) {
     if (name === 'store') continue
     const isGame = name.startsWith('game:')
-    const allowed = isGame ? ['title','genre','description','url','sha256','size','cover','parts'] : ['build','url','sha256','size','notes','parts']
+    const allowed = isGame ? ['title','genre','description','url','sha256','size','cover','background','parts'] : ['build','url','sha256','size','notes','parts']
     const partKey = /^part\d+_(url|sha256|size)$/
     check(Object.keys(data).every(k => allowed.includes(k) || partKey.test(k)), 'Campo desconhecido no catálogo.')
     if (isGame) result.games.push(game({ ...data, slug: name.slice(5) }))
@@ -176,6 +177,7 @@ export async function loadPublic(baseUrl, config = {}) {
   for (const entry of [...feed.games, ...(feed.update ? [feed.update] : [])]) {
     checkSource(entry.url)
     if (entry.cover) checkSource(entry.cover)
+    if (entry.background) checkSource(entry.background)
   }
   return feed
 }
@@ -337,6 +339,7 @@ export async function connect({ owner, repo, branch = 'main', prefix = '', token
     for (const entry of [...feed.games, ...(feed.update ? [feed.update] : [])]) {
       checkSource(entry.url)
       if (entry.cover) checkSource(entry.cover)
+    if (entry.background) checkSource(entry.background)
     }
     return { feed, sha: file.sha }
   }
@@ -474,9 +477,17 @@ export async function connect({ owner, repo, branch = 'main', prefix = '', token
       notify('Enviando a capa…')
       cover = await storeBytes('media/' + await hash(bytes) + '.' + ext, bytes)
     }
+    let background = old?.background
+    if (form.backgroundFile) {
+      check(form.backgroundFile.size > 0 && form.backgroundFile.size <= maxCover, 'O fundo pode ter até 2 MiB.')
+      const bytes = new Uint8Array(await form.backgroundFile.arrayBuffer())
+      const ext = imageType(bytes)
+      notify('Enviando o fundo…')
+      background = await storeBytes('media/' + await hash(bytes) + '.' + ext, bytes)
+    }
     const p = old && !form.file && !form.assetId ? pkg(old) : await payload(form, false, notify)
     notify('Atualizando o catálogo…')
-    return commit(start, game({ slug: id, title, genre, description, ...p, cover }), false)
+    return commit(start, game({ slug: id, title, genre, description, ...p, cover, background }), false)
   }
   async function publishUpdate(form) {
     const build = number(form.build, 'Build')
