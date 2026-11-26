@@ -42,7 +42,7 @@
     <div class="toolbar">
       <label class="search">Buscar<input id="query" type="search" placeholder="Título, gênero, descrição ou identificador"></label>
       <label>Ordenar<select id="sort-games"><option value="recent">Mais recentes</option><option value="oldest">Mais antigos</option><option value="title">Título A–Z</option><option value="size">Maior tamanho</option></select></label>
-      <label>Gênero<select id="filter-genre"><option value="">Todos os gêneros</option></select></label>
+      <label>Categoria<select id="filter-genre"><option value="">Todas as categorias</option></select></label>
       <button class="outline" type="button" id="export-catalog">Exportar JSON</button>
       <button class="outline" type="button" id="import-catalog">Importar JSON</button>
       <input id="import-file" type="file" accept="application/json" hidden>
@@ -113,7 +113,24 @@
   <button type="button" class="close" data-close aria-label="Fechar">×</button><p class="kicker" id="publish-type"></p><h2 id="publish-title">Publicar jogo</h2>
   <div id="game-fields" class="stack">
     <label>Título<input name="title" maxlength="80" required></label>
-    <div class="pair"><label>Identificador<input name="slug" maxlength="40" pattern="[a-z0-9\-]+" placeholder="meu-jogo" required></label><label>Gênero<input name="genre" maxlength="48" required></label></div>
+    <div class="pair"><label>Identificador<input name="slug" maxlength="40" pattern="[a-z0-9\-]+" placeholder="meu-jogo" required></label><label>Categoria<input name="genre" maxlength="48" list="genre-options" placeholder="Ex.: Ação, Indie, Dashboard" required></label></div>
+    <datalist id="genre-options">
+      <option value="Ação"></option>
+      <option value="Aventura"></option>
+      <option value="RPG"></option>
+      <option value="Terror"></option>
+      <option value="Esportes"></option>
+      <option value="Indie"></option>
+      <option value="Corrida"></option>
+      <option value="Dashboard"></option>
+      <option value="App"></option>
+      <option value="Emulador"></option>
+      <option value="Utilitário"></option>
+      <option value="Estratégia"></option>
+      <option value="Puzzle"></option>
+      <option value="Simulação"></option>
+      <option value="Música"></option>
+    </datalist>
     <label>Descrição<textarea name="description" rows="2" maxlength="320" required></textarea></label>
     <div class="image-current" id="current-cover" hidden><span>Capa atual</span><img id="current-cover-img" alt="Capa atual"><label class="check"><input type="checkbox" name="removeCover"> Remover capa</label></div>
     <div class="image-current" id="current-background" hidden><span>Fundo atual</span><img id="current-background-img" alt="Fundo atual"><label class="check"><input type="checkbox" name="removeBackground"> Remover fundo</label></div>
