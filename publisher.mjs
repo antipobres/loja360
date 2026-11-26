@@ -20,9 +20,9 @@ function field(value, bytes, label, optional = false) {
   return s
 }
 
-function number(value, label, max = maxPackage) {
+function number(value, label, max = maxPackage, min = 1) {
   const n = Number(value)
-  check(/^\d+$/.test(String(value)) && Number.isSafeInteger(n) && n > 0 && n <= max, `${label} inválido.`)
+  check(/^\d+$/.test(String(value)) && Number.isSafeInteger(n) && n >= min && n <= max, `${label} inválido.`)
   return n
 }
 
@@ -89,7 +89,7 @@ function game(v) {
 }
 
 function update(v) {
-  return { build: number(v.build, 'Build'), ...pkg(v), notes: field(v.notes, 320, 'Notas', true) }
+  return { build: number(v.build, 'Build', 100, 0), ...pkg(v), notes: field(v.notes, 320, 'Notas', true) }
 }
 
 export function readFeed(text) {
@@ -526,12 +526,12 @@ export async function connect({ owner, repo, branch = 'main', prefix = '', token
     return commit(start, game({ slug: id, title, genre, description, ...p, cover, background }), false, previousSlug || id)
   }
   async function publishUpdate(form) {
-    const build = number(form.build, 'Build')
+    const build = number(form.build, 'Build', 100, 0)
     const notes = field(form.notes, 320, 'Notas', true)
     const start = await current()
     const old = start.feed.update
-    check(build > (old?.build || 0) || (form.editing && old && build === old.build),
-      'Use um build maior que o já publicado.')
+    check(build > ((old?.build ?? -1)) || (form.editing && old && build === old.build),
+      'Use um build maior que o já publicado (0 a 100).')
     const notify = form.onProgress || (() => {})
     const hasFolder = Array.isArray(form.files) && form.files.length > 0
     const p = old && !form.file && !hasFolder && !form.assetId && !form.externalUrl ? pkg(old) : await payload(form, true, notify)

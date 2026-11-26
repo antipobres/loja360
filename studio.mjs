@@ -231,7 +231,7 @@ function filteredGames() {
 function draw() {
   if (!feed || !Array.isArray(feed.games)) feed = emptyFeed()
   const count = $('#game-count'); if (count) count.textContent = String(feed.games.length)
-  const build = $('#build-number'); if (build) build.textContent = feed.update?.build || '—'
+  const build = $('#build-number'); if (build) build.textContent = feed.update?.build ?? '—'
   const state = $('#source-state'); if (state) state.textContent = sourceLabel()
   const detail = $('#source-detail'); if (detail) detail.textContent = sourceDescription()
   listGames($('#recent'), feed.games.slice(0, 4), false)
@@ -562,14 +562,14 @@ function openPublish(kind, item = null, copy = false) {
   }
   if (!isGame) {
     if (base) {
-      if (publish.elements.build) publish.elements.build.value = String(base.build || 1)
+      if (publish.elements.build) publish.elements.build.value = String(base.build ?? 0)
       if (publish.elements.notes) publish.elements.notes.value = base.notes || ''
       if (publish.elements.externalUrl) publish.elements.externalUrl.value = base.url
       if (publish.elements.externalSha) publish.elements.externalSha.value = base.sha256 || ''
       if (publish.elements.externalSize) publish.elements.externalSize.value = String(base.size || '')
       originalPublishUrl = base.url || ''
     } else {
-      if (publish.elements.build) publish.elements.build.value = String(Math.max(2, (feed.update?.build || 1) + 1))
+      if (publish.elements.build) publish.elements.build.value = String(Math.min(100, (feed.update?.build ?? -1) + 1))
       originalPublishUrl = ''
     }
   }
@@ -753,7 +753,7 @@ async function mediaUrlFor(file, label, current, copy, remove, originalUrl) {
 function localEntryFromForm(isGame, args, existing, copy) {
   if (!isGame) {
     const build = Number(args.build)
-    const oldBuild = Number(feed.update?.build || 0)
+    const oldBuild = Number(feed.update?.build ?? 0)
     if (!Number.isInteger(build) || build < 1) throw Error('Informe um número de build válido.')
     if (build < oldBuild) throw Error('Use uma build maior ou igual à publicada.')
     return { build, url: args.url, sha256: args.sha256, size: Number(args.size), notes: args.notes }
@@ -874,7 +874,7 @@ publish && (publish.onsubmit = async event => {
         else base.games.unshift(entry)
       } else {
         if (!Number.isInteger(Number(args.build)) || Number(args.build) < 1) throw Error('Informe um número de build válido.')
-        if (Number(args.build) < Number(feed.update?.build || 0)) throw Error('Use uma build maior ou igual à publicada.')
+        if (Number(args.build) < Number(feed.update?.build ?? 0)) throw Error('Use uma build maior ou igual à publicada.')
         base.update = localEntryFromForm(false, args, existing, copy)
       }
       writeFeed(base)
