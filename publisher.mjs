@@ -33,10 +33,13 @@ function slug(value) {
 }
 
 function https(value) {
-  check(typeof value === 'string' && value.length <= 512 && value.startsWith('https://') &&
+  const raw = String(value ?? '')
+  const localHttp = /^http:\/\/(?:localhost|127\.0\.0\.1|\[::1\])(?::\d+)?(?:[/?#]|$)/i.test(raw)
+  check(typeof value === 'string' && value.length <= 512 && (value.startsWith('https://') || localHttp) &&
     !/[^\x21-\x7e]|[\\#]/.test(value), 'O endereço do arquivo deve usar HTTPS.')
   const u = new URL(value)
-  check(!u.username && !u.password && !u.port && /^[a-z0-9.-]+$/i.test(u.hostname),
+  const loopback = u.protocol === 'http:' && ['localhost', '127.0.0.1', '[::1]'].includes(u.hostname)
+  check(!u.username && !u.password && (u.protocol === 'https:' || loopback) && /^[a-z0-9.:[\]-]+$/i.test(u.hostname),
     'Endereço HTTPS inválido.')
   return u
 }
@@ -437,16 +440,26 @@ export async function connect({ owner, repo, branch = 'main', prefix = '', token
     const url = await storeBytes('media/' + sha256 + ext, bytes)
     return { url, sha256, size: bytes.length }
   }
-  async function commit(start, item, asUpdate) {
-    const get = feed => asUpdate ? feed.update : feed.games.find(g => g.slug === item.slug)
+  async function commit(start, item, asUpdate, previousSlug = '') {
+    const oldSlug = previousSlug || item.slug
+    const get = feed => asUpdate ? feed.update : feed.games.find(g => g.slug === oldSlug)
     const original = get(start.feed)
     let state = start
     for (let attempt = 0; attempt < 5; attempt++) {
-      if (equal(get(state.feed), item)) return state.feed
-      check(equal(get(state.feed), original), 'Outra publicação alterou este mesmo item. Recarregue antes de publicar.')
+      if (asUpdate || item.slug === oldSlug) {
+        if (equal(get(state.feed), item)) return state.feed
+        check(equal(get(state.feed), original), 'Outra publicação alterou este item. Recarregue antes de publicar.')
+      } else {
+        const currentOld = state.feed.games.find(g => g.slug === oldSlug)
+        const currentTarget = state.feed.games.find(g => g.slug === item.slug)
+        if (!currentOld && equal(currentTarget, item)) return state.feed
+        check(equal(currentOld, original), 'Outra publicação alterou este jogo. Recarregue antes de publicar.')
+        check(!currentTarget, 'Já existe um jogo com esse identificador.')
+      }
       const feed = { ...state.feed, games: [...state.feed.games] }
       if (asUpdate) feed.update = item
       else {
+        if (previousSlug && previousSlug !== item.slug) feed.games = feed.games.filter(g => g.slug !== previousSlug)
         const i = feed.games.findIndex(g => g.slug === item.slug)
         if (i >= 0) feed.games[i] = item
         else feed.games.unshift(item)
@@ -463,15 +476,35 @@ export async function connect({ owner, repo, branch = 'main', prefix = '', token
       }
     }
   }
+  async function mutateCatalog(mutate, message) {
+    let state = await current()
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const feed = { ...state.feed, games: [...state.feed.games] }
+      mutate(feed)
+      const content = b64(utf8.encode(writeFeed(feed)))
+      try {
+        await api(route('feed.ini'), { method: 'PUT', data: { branch, content, message,
+          ...(state.sha ? { sha: state.sha } : {}) } })
+        return feed
+      } catch (e) {
+        if (![409,422].includes(e.status) || attempt === 4) throw e
+        state = await current()
+      }
+    }
+  }
   async function publishGame(form) {
     const id = slug(form.slug)
+    const previousSlug = form.previousSlug ? slug(form.previousSlug) : ''
     const title = field(form.title, 80, 'Título'), genre = field(form.genre, 48, 'Gênero')
     const description = field(form.description, 320, 'Descrição')
     const notify = form.onProgress || (() => {})
     const start = await current()
-    const old = start.feed.games.find(g => g.slug === id)
+    const old = start.feed.games.find(g => g.slug === (previousSlug || id))
+    check(!previousSlug || old, 'O jogo original não existe mais. Recarregue o catálogo.')
     check(old || start.feed.games.length < 64, 'O catálogo atingiu 64 jogos.')
-    let cover = old?.cover
+    check(!previousSlug || previousSlug === id || !start.feed.games.some(g => g.slug === id),
+      'Já existe um jogo com esse identificador.')
+    let cover = form.removeCover ? undefined : (form.cover || old?.cover)
     if (form.coverFile) {
       check(form.coverFile.size > 0 && form.coverFile.size <= maxCover, 'A capa pode ter até 2 MiB.')
       const bytes = new Uint8Array(await form.coverFile.arrayBuffer())
@@ -479,7 +512,7 @@ export async function connect({ owner, repo, branch = 'main', prefix = '', token
       notify('Enviando a capa…')
       cover = await storeBytes('media/' + await hash(bytes) + '.' + ext, bytes)
     }
-    let background = old?.background
+    let background = form.removeBackground ? undefined : (form.background || old?.background)
     if (form.backgroundFile) {
       check(form.backgroundFile.size > 0 && form.backgroundFile.size <= maxCover, 'O fundo pode ter até 2 MiB.')
       const bytes = new Uint8Array(await form.backgroundFile.arrayBuffer())
@@ -487,19 +520,51 @@ export async function connect({ owner, repo, branch = 'main', prefix = '', token
       notify('Enviando o fundo…')
       background = await storeBytes('media/' + await hash(bytes) + '.' + ext, bytes)
     }
-    const p = old && !form.file && !form.assetId ? pkg(old) : await payload(form, false, notify)
+    const hasFolder = Array.isArray(form.files) && form.files.length > 0
+    const p = old && !form.file && !hasFolder && !form.assetId && !form.externalUrl ? pkg(old) : await payload(form, false, notify)
     notify('Atualizando o catálogo…')
-    return commit(start, game({ slug: id, title, genre, description, ...p, cover, background }), false)
+    return commit(start, game({ slug: id, title, genre, description, ...p, cover, background }), false, previousSlug || id)
   }
   async function publishUpdate(form) {
     const build = number(form.build, 'Build')
     const notes = field(form.notes, 320, 'Notas', true)
     const start = await current()
-    check(build > (start.feed.update?.build || 0), 'Use um build maior que o já publicado.')
+    const old = start.feed.update
+    check(build > (old?.build || 0) || (form.editing && old && build === old.build),
+      'Use um build maior que o já publicado.')
     const notify = form.onProgress || (() => {})
-    const p = await payload(form, true, notify)
+    const hasFolder = Array.isArray(form.files) && form.files.length > 0
+    const p = old && !form.file && !hasFolder && !form.assetId && !form.externalUrl ? pkg(old) : await payload(form, true, notify)
     notify('Publicando a atualização…')
     return commit(start, update({ build, notes, ...p }), true)
+  }
+  async function deleteGame(value) {
+    const id = slug(value)
+    return mutateCatalog(feed => {
+      check(feed.games.some(g => g.slug === id), 'Jogo não encontrado.')
+      feed.games = feed.games.filter(g => g.slug !== id)
+    }, 'Excluir jogo ' + id)
+  }
+  async function deleteUpdate() {
+    return mutateCatalog(feed => {
+      check(feed.update, 'Não há atualização publicada.')
+      feed.update = null
+    }, 'Excluir atualização da dashboard')
+  }
+  async function replaceCatalog(next) {
+    const clean = readFeed(writeFeed({ games: next.games || [], update: next.update || null }))
+    let state = await current()
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const content = b64(utf8.encode(writeFeed(clean)))
+      try {
+        await api(route('feed.ini'), { method: 'PUT', data: { branch, content, message: 'Importar catálogo completo',
+          ...(state.sha ? { sha: state.sha } : {}) } })
+        return clean
+      } catch (e) {
+        if (![409,422].includes(e.status) || attempt === 4) throw e
+        state = await current()
+      }
+    }
   }
 
   function issueView(i) {
@@ -535,5 +600,5 @@ export async function connect({ owner, repo, branch = 'main', prefix = '', token
     const reply = await api('/issues/' + i.number + '/comments', { method: 'POST', data: { body: ideaBody(body,true) } })
     return { url: reply.html_url, id: reply.id }
   }
-  return { listAssets, publishGame, publishUpdate, listIdeas, readIdea, submitIdea, replyIdea }
+  return { listAssets, publishGame, publishUpdate, deleteGame, deleteUpdate, replaceCatalog, listIdeas, readIdea, submitIdea, replyIdea }
 }

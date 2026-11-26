@@ -1,0 +1,15 @@
+{
+  "name": "loja360-site",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Site de publicação e servidor do catálogo Loja 360 para Xbox 360",
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "node --test tests/publisher.test.mjs tests/server.test.mjs",
+    "check": "node --check server.mjs && node --check studio.mjs && node --check publisher.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

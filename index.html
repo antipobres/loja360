@@ -7,34 +7,50 @@
 </head>
 <body>
 <aside class="rail">
-  <a class="brand" href="#inicio" aria-label="Cards Studio, início"><i class="mark" aria-hidden="true"></i><span>Loja<span class="light">360</span></span></a>
+  <a class="brand" href="#inicio" aria-label="Loja 360, início"><i class="mark" aria-hidden="true"></i><span>Loja<span class="light">360</span></span></a>
   <p class="kicker rail-label">Publicação</p>
   <nav aria-label="Navegação principal">
-    <a href="#inicio"><i class="ico tiles"></i>Visão geral</a><a href="#biblioteca"><i class="ico covers"></i>Biblioteca</a><a href="#updates"><i class="ico tiles"></i>Atualizações</a><a href="#ideias"><i class="ico bubble"></i>Ideias e chat</a>
+    <a href="#inicio"><i class="ico tiles"></i>Visão geral</a><a href="#biblioteca"><i class="ico covers"></i>Biblioteca</a><a href="#updates"><i class="ico tiles"></i>Atualizações</a><a href="#ideias"><i class="ico bubble"></i>Ideias e IA</a>
   </nav>
   <div class="rail-bottom"><span class="console-mark" aria-hidden="true">◉</span><div><strong>Xbox 360</strong><small>Dashboard Cards</small></div></div>
 </aside>
 <main>
-  <header class="top"><div class="crumb">Workspace <span>/</span> <b id="crumb">Visão geral</b></div><button class="outline connectBtn" type="button"><span class="dot"></span><span class="connection-label">Conectar GitHub</span></button></header>
+  <header class="top">
+    <div class="crumb">Workspace <span>/</span> <b id="crumb">Visão geral</b></div>
+    <div class="top-actions">
+      <button class="outline" id="ai-open" type="button"><span aria-hidden="true">✦</span> IA</button>
+      <button class="outline connectBtn" type="button"><span class="dot"></span><span class="connection-label">Conectar GitHub</span></button>
+    </div>
+  </header>
   <div id="feedback" role="status" aria-live="polite" hidden></div>
   <section id="inicio" class="view">
     <div class="hero"><div class="hero-text"><p class="kicker"><i></i> Dashboard Cards</p><h1>Central de<br>publicação<span>.</span></h1>
-    <p>Gerencie a loja, as versões da dash e as ideias para o seu Xbox 360.</p>
+    <p>Gerencie a loja, as versões da dash e as ideias para o seu Xbox 360. Tudo salvo de verdade quando o servidor está conectado.</p>
     <button class="primary" data-game><b aria-hidden="true">＋</b> Publicar jogo</button></div></div>
     <div class="metrics">
       <a href="#biblioteca"><span class="metric-icon"><i class="ico covers"></i></span><div><small>Jogos no catálogo</small><strong id="game-count">—</strong></div></a>
       <a href="#updates"><span class="metric-icon"><i class="ico upload"></i></span><div><small>Build publicada</small><strong id="build-number">—</strong></div></a>
-      <a href="#conexao"><span class="metric-icon"><i class="ico link"></i></span><div><small>Fonte do Xbox</small><strong class="metric-word" id="source-state">Configurar</strong></div></a>
+      <a href="#conexao"><span class="metric-icon"><i class="ico link"></i></span><div><small>Fonte do catálogo</small><strong class="metric-word" id="source-state">Local</strong></div></a>
     </div>
-    <div class="section-head"><div><p class="kicker">Biblioteca</p><h2>Catálogo da loja</h2></div><a class="textlink" href="#catalogo">Ver catálogo</a></div>
+    <p class="hint" id="source-detail"></p>
+    <div class="section-head"><div><p class="kicker">Biblioteca</p><h2>Catálogo da loja</h2></div><a class="textlink" href="#biblioteca">Ver biblioteca</a></div>
     <div id="recent"></div>
   </section>
   <section id="biblioteca" class="view" hidden>
     <div class="page-title"><div><p class="kicker">Loja do Xbox 360</p><h1>Biblioteca</h1></div><button class="primary" data-game>＋ Publicar jogo</button></div>
-    <p class="hint">Todos os jogos publicados no site aparecem aqui e na dashboard quando o feed do GitHub Pages atualizar.</p>
+    <p class="hint">Todos os jogos publicados aparecem aqui e na dashboard quando o feed atualizar. Com o servidor conectado, editar ou excluir vale para todos os navegadores e dispositivos.</p>
+    <div class="toolbar">
+      <label class="search">Buscar<input id="query" type="search" placeholder="Título, gênero, descrição ou identificador"></label>
+      <label>Ordenar<select id="sort-games"><option value="recent">Mais recentes</option><option value="oldest">Mais antigos</option><option value="title">Título A–Z</option><option value="size">Maior tamanho</option></select></label>
+      <label>Gênero<select id="filter-genre"><option value="">Todos os gêneros</option></select></label>
+      <button class="outline" type="button" id="export-catalog">Exportar JSON</button>
+      <button class="outline" type="button" id="import-catalog">Importar JSON</button>
+      <input id="import-file" type="file" accept="application/json" hidden>
+    </div>
+    <p class="hint" id="library-count" role="status"></p>
     <div class="pane stack" id="library-drive-panel">
       <h2>Pasta padrão da biblioteca (Google Drive)</h2>
-      <p class="hint">Pasta padrão: adicione seus .zip/.xex ou pastas de jogos nela, deixe como “Qualquer pessoa com o link” e importe aqui.</p>
+      <p class="hint">Adicione seus .zip/.xex ou pastas de jogos nela e deixe como “Qualquer pessoa com o link”. Com o servidor conectado a importação funciona mesmo quando o Google bloqueia o navegador.</p>
       <label>Pasta padrão<input id="library-folder-url" type="url" value="https://drive.google.com/drive/folders/1xNVtJi_8Rv48lANGjJBDjTBpmoZaPnvS?usp=sharing"></label>
       <div class="actions"><button class="outline" type="button" id="library-folder-import">Importar da pasta</button><a class="outline" id="library-folder-open" href="https://drive.google.com/drive/folders/1xNVtJi_8Rv48lANGjJBDjTBpmoZaPnvS?usp=sharing" target="_blank" rel="noopener noreferrer">Abrir pasta</a></div>
       <label>Ou cole links de arquivos/pastas (um por linha)<textarea id="library-folder-links" rows="3" placeholder="https://drive.google.com/file/d/...&#10;https://drive.google.com/uc?export=download&id=..."></textarea></label>
@@ -46,11 +62,13 @@
   </section>
   <section id="updates" class="view" hidden>
     <div class="page-title"><div><p class="kicker">Software do console</p><h1>Atualizações</h1></div><button class="primary" id="open-update">＋ Publicar build</button></div>
-    <div class="pane"><p class="kicker">Canal estável</p><h2 id="release-title">Sem build publicada</h2><p id="release-notes"></p><dl class="metadata" id="release-meta"></dl></div>
-    <p class="hint">Publique um pacote .zip com todos os arquivos da dash (ou um .xex) com o mesmo número de build usado na compilação. A dash consulta este canal enquanto está aberta.</p>
+    <div class="pane"><p class="kicker">Canal estável</p><h2 id="release-title">Sem build publicada</h2><p id="release-notes"></p><dl class="metadata" id="release-meta"></dl>
+      <div class="actions"><button class="outline" type="button" id="edit-update">Editar build</button><button class="danger" type="button" id="delete-update">Excluir build</button></div>
+    </div>
+    <p class="hint">Publique um pacote .zip com todos os arquivos da dash (ou um .xex) com o mesmo número de build usado na compilação. A dash consulta este canal enquanto está aberta e ao abrir a loja.</p>
     <div class="pane stack" id="updates-drive-panel">
       <h2>Pasta padrão de atualizações (Google Drive)</h2>
-      <p class="hint">Pasta padrão: adicione .zip/.xex de atualização da dash nela, deixe como “Qualquer pessoa com o link” e importe aqui.</p>
+      <p class="hint">Adicione .zip/.xex de atualização da dash nela, deixe como “Qualquer pessoa com o link” e importe aqui.</p>
       <label>Pasta padrão<input id="updates-folder-url" type="url" value="https://drive.google.com/drive/folders/1MDYFD_Q6WDB17Jn1YGVIyrOjDqpe6q8p?usp=sharing"></label>
       <div class="actions"><button class="outline" type="button" id="updates-folder-import">Importar da pasta</button><a class="outline" id="updates-folder-open" href="https://drive.google.com/drive/folders/1MDYFD_Q6WDB17Jn1YGVIyrOjDqpe6q8p?usp=sharing" target="_blank" rel="noopener noreferrer">Abrir pasta</a></div>
       <label>Ou cole links de arquivos/pastas (um por linha)<textarea id="updates-folder-links" rows="3" placeholder="https://drive.google.com/file/d/...&#10;https://drive.google.com/uc?export=download&id=..."></textarea></label>
@@ -60,27 +78,56 @@
     </div>
   </section>
   <section id="ideias" class="view" hidden>
-    <div class="page-title"><div><p class="kicker">Desenvolvimento</p><h1>Ideias e chat</h1></div><button class="primary" id="new-idea">＋ Nova ideia</button></div>
-    <p class="hint">As conversas ficam nas Issues do repositório. As respostas da IA usam o GitHub Actions e a chave OpenAI configurada pelo responsável.</p>
+    <div class="page-title"><div><p class="kicker">Desenvolvimento</p><h1>Ideias e IA</h1></div><div class="actions"><button class="outline" id="ai-open-ideas" type="button">✦ Abrir IA</button><button class="primary" id="new-idea">＋ Nova ideia</button></div></div>
+    <p class="hint">As conversas do GitHub ficam nas Issues do repositório. A IA responde pelo servidor quando AI_API_KEY está configurada; sem chave, o assistente local usa os dados do catálogo.</p>
     <div class="discussion"><div class="pane"><h2>Conversas</h2><div id="idea-list"></div></div><div class="pane" id="thread"><h2>Selecione uma ideia</h2></div></div>
   </section>
   <section id="conexao" class="view" hidden>
     <div class="page-title"><div><p class="kicker">Integração</p><h1>Conexão</h1></div></div>
-    <form class="pane stack" id="settings-form"><h2>Configuração do site</h2>
-    <p class="hint">Configure o repositório GitHub Pages onde o feed.ini será publicado. Para publicar, você pode usar um token no campo abaixo (salvo apenas neste navegador).</p>
-    <div class="pair"><label>Conta ou organização<input name="owner" required autocomplete="off" placeholder="seu-usuario"></label><label>Repositório<input name="repo" required placeholder="cards-studio"></label></div>
-    <div class="pair"><label>Branch publicada<input name="branch" required value="main"></label><label>Pasta no repositório<input name="prefix" placeholder="Deixe vazia para a raiz"></label></div>
-    <label>Endereço público da pasta no Pages<input type="url" name="baseUrl" placeholder="https://seu-usuario.github.io/cards-studio/"></label>
-    <label>Token GitHub (opcional, para publicar)<input name="token" type="password" autocomplete="off" spellcheck="false" placeholder="ghp_..."></label>
-    <div class="actions"><button class="primary" type="submit">Salvar</button><button class="outline" type="button" id="disconnect">Limpar</button></div></form>
-    <div class="pane setup"><h2>Atualizar a loja</h2><p>A dashboard lê o <code>feed.ini</code> publicado no site. Ao abrir o menu da loja na dash, ela atualiza automaticamente. Se precisar, gere o arquivo <code>store-site.ini</code> para apontar a dash para este site.</p><div class="actions"><button class="primary" id="refresh-store">Atualizar a loja</button><button class="outline" id="download-config">Baixar store-site.ini</button></div></div>
+    <div class="pane stack" id="server-panel">
+      <h2>Servidor do catálogo (recomendado)</h2>
+      <p class="hint">Para salvar jogos de verdade, editar/excluir de qualquer navegador e calcular SHA-256 mesmo com bloqueio do Drive, rode <code>node server.mjs</code> no seu host. O servidor guarda o catálogo em <code>data/catalog.json</code> e publica <code>/feed.ini</code> para a dash.</p>
+      <label>Endereço do servidor<input id="api-url" type="url" placeholder="https://sua-api.exemplo.com"></label>
+      <label>Chave de administração (se configurada)<input id="api-token" type="password" autocomplete="off" spellcheck="false" placeholder="Opcional, igual a ADMIN_TOKEN"></label>
+      <div class="actions"><button class="primary" id="api-connect" type="button">Conectar servidor</button><button class="outline" id="api-disconnect" type="button">Usar GitHub/local</button></div>
+      <p class="hint" id="api-status" role="status"></p>
+    </div>
+    <form class="pane stack" id="settings-form">
+      <h2>Publicar no GitHub Pages (opcional)</h2>
+      <p class="hint">Use esta opção se quiser um site estático. O token fica salvo apenas neste navegador e só é necessário para publicar.</p>
+      <div class="pair"><label>Conta ou organização<input name="owner" required autocomplete="off" placeholder="seu-usuario"></label><label>Repositório<input name="repo" required placeholder="cards-studio"></label></div>
+      <div class="pair"><label>Branch publicada<input name="branch" required value="main"></label><label>Pasta no repositório<input name="prefix" placeholder="Deixe vazia para a raiz"></label></div>
+      <label>Endereço público da pasta no Pages<input type="url" name="baseUrl" placeholder="https://seu-usuario.github.io/cards-studio/"></label>
+      <label>Token GitHub (opcional, para publicar)<input name="token" type="password" autocomplete="off" spellcheck="false" placeholder="ghp_..."></label>
+      <div class="actions"><button class="primary" type="submit">Salvar GitHub</button><button class="outline" type="button" id="disconnect">Desconectar GitHub</button></div>
+    </form>
+    <div class="pane setup">
+      <h2>Atualizar a loja</h2>
+      <p>A dashboard lê o <code>feed.ini</code> publicado. Ao abrir o menu da loja na dash, ela atualiza automaticamente. Gere o <code>store-site.ini</code> para apontar o Xbox para este feed.</p>
+      <div class="actions"><button class="primary" id="refresh-store" type="button">Atualizar a loja</button><button class="outline" id="download-config" type="button">Baixar store-site.ini</button><button class="outline" id="download-feed" type="button">Baixar feed.ini</button><a class="outline" id="open-feed" href="./feed.ini" target="_blank" rel="noopener noreferrer">Abrir feed.ini</a></div>
+    </div>
   </section>
-  <footer><span>Cards Studio</span><span><a href="./termos.html">Termos de Uso</a> • <a href="./privacidade.html">Política de Privacidade</a></span></footer>
+  <footer><span>Loja 360</span><span><a href="./termos.html">Termos de Uso</a> • <a href="./privacidade.html">Política de Privacidade</a></span></footer>
 </main>
 <dialog id="publish-dialog" aria-labelledby="publish-title"><form class="stack" id="publish-form">
   <button type="button" class="close" data-close aria-label="Fechar">×</button><p class="kicker" id="publish-type"></p><h2 id="publish-title">Publicar jogo</h2>
-  <div id="game-fields" class="stack"><label>Título<input name="title" maxlength="80" required></label><div class="pair"><label>Identificador<input name="slug" maxlength="40" pattern="[a-z0-9-]+" required></label><label>Gênero<input name="genre" maxlength="48" required></label></div><label>Descrição<textarea name="description" rows="2" maxlength="320" required></textarea></label><label>Capa opcional • PNG ou JPG<input type="file" accept="image/png,image/jpeg" name="coverFile"></label><label>Fundo opcional • PNG ou JPG<input type="file" accept="image/png,image/jpeg" name="backgroundFile"></label></div>
-  <div id="update-fields" class="stack" hidden><label>Número da build<input name="build" type="number" min="1" max="2147483647"></label><label>Notas da versão<textarea name="notes" rows="2" maxlength="320"></textarea></label></div>
+  <div id="game-fields" class="stack">
+    <label>Título<input name="title" maxlength="80" required></label>
+    <div class="pair"><label>Identificador<input name="slug" maxlength="40" pattern="[a-z0-9\-]+" placeholder="meu-jogo" required></label><label>Gênero<input name="genre" maxlength="48" required></label></div>
+    <label>Descrição<textarea name="description" rows="2" maxlength="320" required></textarea></label>
+    <div class="image-current" id="current-cover" hidden><span>Capa atual</span><img id="current-cover-img" alt="Capa atual"><label class="check"><input type="checkbox" name="removeCover"> Remover capa</label></div>
+    <div class="image-current" id="current-background" hidden><span>Fundo atual</span><img id="current-background-img" alt="Fundo atual"><label class="check"><input type="checkbox" name="removeBackground"> Remover fundo</label></div>
+    <label>Substituir capa • PNG, JPG ou WebP de até 2 MiB<input type="file" accept="image/png,image/jpeg,image/webp" name="coverFile"></label>
+    <label>Substituir fundo • PNG, JPG ou WebP de até 2 MiB<input type="file" accept="image/png,image/jpeg,image/webp" name="backgroundFile"></label>
+    <label>Ou envie o jogo (.zip ou .xex) — modo GitHub<input id="game-file" type="file" accept=".zip,.xex"></label>
+    <label>Ou envie a pasta completa do jogo — modo GitHub<input id="game-files" type="file" webkitdirectory multiple></label>
+  </div>
+  <div id="update-fields" class="stack" hidden>
+    <label>Número da build<input name="build" type="number" min="1" max="2147483647"></label>
+    <label>Notas da versão<textarea name="notes" rows="2" maxlength="320"></textarea></label>
+    <label>Ou envie o pacote da dashboard (.zip ou .xex) — modo GitHub<input id="update-file" type="file" accept=".zip,.xex"></label>
+    <label>Ou envie a pasta completa da dashboard — modo GitHub<input id="update-files" type="file" webkitdirectory multiple></label>
+  </div>
   <input type="hidden" name="source" value="url">
   <div class="stack" id="url-source">
     <label>Link público do arquivo/pasta no Google Drive (ou URL HTTPS direta)<input name="externalUrl" type="url" placeholder="https://drive.google.com/... ou https://..." required></label>
@@ -88,10 +135,24 @@
       <div class="pair" style="margin-top:8px"><label>SHA-256<input name="externalSha" placeholder="Calculado automaticamente"></label><label>Tamanho em bytes<input name="externalSize" type="number" min="1" placeholder="Calculado automaticamente"></label></div>
       <div class="actions"><button class="outline" type="button" id="auto-fill-hash">Calcular SHA-256 e tamanho agora</button></div>
     </details>
-    <p class="hint">Cole o link público do arquivo/pasta no Drive. O site tenta calcular SHA-256 e tamanho automaticamente ao publicar.</p>
+    <p class="hint">O identificador pode ser alterado ao editar; o jogo antigo é substituído. O SHA-256 e o tamanho são calculados pelo servidor ou pelo navegador. No modo servidor, envie pacotes grandes ao Google Drive e cole o link público; o envio direto de arquivo/pasta fica disponível no modo GitHub.</p>
   </div>
   <p role="status" class="hint" id="publish-result"></p><button class="primary" type="submit" id="publish-submit">Publicar no catálogo</button>
 </form></dialog>
 <dialog id="idea-dialog" aria-labelledby="idea-title"><form class="stack" id="idea-form"><button type="button" class="close" data-close aria-label="Fechar">×</button><p class="kicker">GitHub Issues</p><h2 id="idea-title">Nova ideia</h2><label>Título<input name="title" maxlength="120" required></label><label>Ideia ou pergunta<textarea name="body" rows="5" maxlength="4000" required></textarea></label><label class="check"><input type="checkbox" name="chat" checked> Pedir uma resposta da IA</label><p class="hint">O texto será publicado no repositório público.</p><p class="hint" id="idea-result" role="status"></p><button class="primary">Publicar ideia</button></form></dialog>
+<dialog id="ai-dialog" aria-labelledby="ai-title"><div class="ai-shell">
+  <button type="button" class="close" data-close aria-label="Fechar">×</button>
+  <p class="kicker">Assistente</p><h2 id="ai-title">IA da Loja 360</h2>
+  <p class="hint" id="ai-source">Assistente local do site. Para IA externa, conecte um servidor com AI_API_KEY.</p>
+  <div id="ai-messages" class="ai-messages" aria-live="polite"></div>
+  <div class="ai-suggestions">
+    <button type="button" data-ai-prompt="Quantos jogos estão publicados?">Quantos jogos?</button>
+    <button type="button" data-ai-prompt="Liste os jogos publicados e os tamanhos.">Listar jogos</button>
+    <button type="button" data-ai-prompt="Como publicar um jogo com capa e link do Drive?">Como publicar</button>
+    <button type="button" data-ai-prompt="Como o servidor e o SHA-256 funcionam?">Servidor e SHA</button>
+  </div>
+  <form class="ai-form" id="ai-form"><textarea id="ai-input" rows="2" maxlength="2000" required placeholder="Pergunte sobre jogos, builds, links, capas ou o servidor..."></textarea><button class="primary" id="ai-send">Enviar</button></form>
+  <div class="actions"><button class="outline" type="button" id="ai-clear">Limpar conversa</button></div>
+</div></dialog>
 <noscript>Ative o JavaScript para usar o painel de publicação.</noscript><script type="module" src="./studio.mjs"></script>
 </body></html>

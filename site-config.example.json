@@ -1,0 +1,15 @@
+{
+  "_aviso": "SEM SEGURANÇA: qualquer pessoa com acesso a este arquivo/site pode ver o token. Use apenas em repo/site privado.",
+  "github": {
+    "owner": "SEU-USUARIO",
+    "repo": "SEU-REPO",
+    "branch": "main",
+    "prefix": "",
+    "baseUrl": "https://SEU-USUARIO.github.io/SEU-REPO/",
+    "token": "ghp_COLE_SEU_TOKEN_AQUI"
+  },
+  "api": {
+    "base": "",
+    "token": ""
+  }
+}

@@ -127,6 +127,20 @@ test('validates cover dimensions and includes a supported cover before feed comm
   assert.match((await client.publishGame({ ...form(), coverFile: new File([png],'c.png') })).games[0].cover, /\.png$/)
 })
 
+test('empacota uma pasta completa e publica o zip da dashboard', async t => {
+  const state = github(t)
+  const client = await connect(config)
+  const xex = new File(['XEX2dashboard'], 'default.xex')
+  const ini = new File(['[games]\n'], 'games.ini')
+  Object.defineProperty(xex, 'webkitRelativePath', { value: 'Dash1.0/default.xex' })
+  Object.defineProperty(ini, 'webkitRelativePath', { value: 'Dash1.0/games.ini' })
+  const feed = await client.publishUpdate({ build: 2, notes: 'Pasta completa da dash.', files: [xex, ini] })
+  assert.equal(feed.update.build, 2)
+  assert.equal(feed.update.size > 0, true)
+  const zipPut = state.calls.find(c => c.method === 'PUT' && /\/media\/[0-9a-f]{64}\.zip$/.test(c.href))
+  assert.ok(zipPut)
+})
+
 test('chat markers are written only on explicit requests; issue list excludes PRs', async t => {
   const state = github(t)
   const client = await connect(config)
