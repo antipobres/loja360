@@ -148,8 +148,11 @@
   <input type="hidden" name="source" value="url">
   <div class="stack" id="url-source">
     <label>Link público do arquivo/pasta no Google Drive (ou URL HTTPS direta)<input name="externalUrl" type="url" placeholder="https://drive.google.com/... ou https://..." required></label>
-    <input type="hidden" name="externalSha" value="">
-    <input type="hidden" name="externalSize" value="">
+    <details class="advanced">
+      <summary>Avançado: SHA-256 e tamanho (opcional)</summary>
+      <label>SHA-256 (64 hex, opcional)<input name="externalSha" type="text" placeholder="deixe vazio para calcular automaticamente"></label>
+      <label>Tamanho em bytes (opcional)<input name="externalSize" type="number" min="0" placeholder="0"></label>
+    </details>
     <p class="hint">Cole o link público e publique. A dashboard calcula o SHA-256 e o tamanho automaticamente ao baixar. No modo servidor, envie pacotes grandes ao Google Drive e cole o link público; no modo GitHub, você pode enviar arquivo/pasta.</p>
   </div>
   <p role="status" class="hint" id="publish-result"></p><button class="primary" type="submit" id="publish-submit">Publicar no catálogo</button>
