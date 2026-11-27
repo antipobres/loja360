@@ -141,6 +141,7 @@ export function writeFeed(feed) {
     lines.push('', '[' + name + ']')
     for (const [key, value] of Object.entries(data)) {
       if (value === '' || value == null) continue
+      if ((key === 'size' || key === 'sha256') && (value === 0 || value === '0')) continue
       if (key === 'parts' && Array.isArray(value)) {
         if (!value.length) continue
         lines.push('parts=' + value.length)
