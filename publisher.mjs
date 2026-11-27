@@ -56,10 +56,11 @@ function parseParts(v, maxTotal=maxPackage) {
   const parts = []
   let total = 0
   for (let i = 0; i < n; i++) {
-    const p = { url: v['part'+i+'_url'] || v['part'+i+'url'], sha256: (v['part'+i+'_sha256'] || v['part'+i+'sha256'] || '').toLowerCase(), size: v['part'+i+'_size'] || v['part'+i+'size'] }
-    check(p.url && p.sha256 && p.size, 'Parte ' + i + ' inválida no catálogo.')
-    https(p.url); check(digestPattern.test(p.sha256), 'SHA-256 da parte inválido.')
-    const size = number(p.size, 'Tamanho da parte', maxTotal)
+    const p = { url: v['part'+i+'_url'] || v['part'+i+'url'], sha256: String(v['part'+i+'_sha256'] || v['part'+i+'sha256'] || '').toLowerCase(), size: v['part'+i+'_size'] || v['part'+i+'size'] }
+    check(p.url, 'Parte ' + i + ' inválida no catálogo.')
+    https(p.url)
+    if (p.sha256) check(digestPattern.test(p.sha256), 'SHA-256 da parte inválido.')
+    const size = p.size ? number(p.size, 'Tamanho da parte', maxTotal) : 0
     total += size; check(total <= maxTotal, 'Pacote multipart excede o limite.')
     parts.push({ url: p.url, sha256: p.sha256, size })
   }
@@ -67,14 +68,19 @@ function parseParts(v, maxTotal=maxPackage) {
 }
 
 function pkg(v) {
-  check(digestPattern.test(v.sha256 || ''), 'SHA-256 inválido.')
   https(v.url)
-  const out = { url: v.url, sha256: v.sha256.toLowerCase(), size: number(v.size, 'Tamanho') }
+  const sha = String(v.sha256 || '').trim().toLowerCase()
+  if (sha) check(digestPattern.test(sha), 'SHA-256 inválido.')
+  const rawSize = String(v.size ?? '').trim()
+  const size = rawSize ? number(rawSize, 'Tamanho', maxPackage) : 0
+  const out = { url: v.url, sha256: sha, size }
   const parts = Array.isArray(v.parts) ? v.parts : parseParts(v)
   if (parts.length) {
     out.parts = parts.map((p, i) => {
-      https(p.url); check(digestPattern.test(p.sha256||''), 'SHA-256 da parte inválido.')
-      return { url: p.url, sha256: String(p.sha256).toLowerCase(), size: number(p.size, 'Tamanho da parte', maxPackage) }
+      https(p.url)
+      const partSha = String(p.sha256 || '').trim().toLowerCase()
+      if (partSha) check(digestPattern.test(partSha), 'SHA-256 da parte inválido.')
+      return { url: p.url, sha256: partSha, size: number(p.size, 'Tamanho da parte', maxPackage) }
     })
   }
   return out
@@ -397,11 +403,12 @@ export async function connect({ owner, repo, branch = 'main', prefix = '', token
     if (form.externalUrl) {
       const url = normalizeExternalUrl(form.externalUrl)
       const sha256 = String(form.externalSha || '').trim().toLowerCase()
-      check(digestPattern.test(sha256), 'Informe o SHA-256 do arquivo externo.')
-      const size = number(form.externalSize, 'Tamanho', maxPackage)
+      if (sha256) check(digestPattern.test(sha256), 'SHA-256 inválido.')
+      const rawSize = String(form.externalSize ?? '').trim()
+      const size = rawSize ? number(rawSize, 'Tamanho', maxPackage) : 0
       const parts = Array.isArray(form.parts) ? form.parts.map(p => ({ url: normalizeExternalUrl(p.url), sha256: String(p.sha256||'').toLowerCase(), size: number(p.size, 'Tamanho da parte', maxPackage) })) : []
-      parts.forEach(p => check(digestPattern.test(p.sha256), 'SHA-256 da parte inválido.'))
-      if (parts.length) check(parts.reduce((a,p)=>a+p.size,0) === size, 'Soma das partes deve ser igual ao tamanho total.')
+      parts.forEach(p => { if (p.sha256) check(digestPattern.test(p.sha256), 'SHA-256 da parte inválido.') })
+      if (parts.length && size) check(parts.reduce((a,p)=>a+p.size,0) === size, 'Soma das partes deve ser igual ao tamanho total.')
       return parts.length ? { url, sha256, size, parts } : { url, sha256, size }
     }
     if (form.assetId) {

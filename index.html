@@ -113,24 +113,24 @@
   <button type="button" class="close" data-close aria-label="Fechar">×</button><p class="kicker" id="publish-type"></p><h2 id="publish-title">Publicar jogo</h2>
   <div id="game-fields" class="stack">
     <label>Título<input name="title" maxlength="80" required></label>
-    <div class="pair"><label>Identificador<input name="slug" maxlength="40" pattern="[a-z0-9\-]+" placeholder="meu-jogo" required></label><label>Categoria<input name="genre" maxlength="48" list="genre-options" placeholder="Ex.: Ação, Indie, Dashboard" required></label></div>
-    <datalist id="genre-options">
-      <option value="Ação"></option>
-      <option value="Aventura"></option>
-      <option value="RPG"></option>
-      <option value="Terror"></option>
-      <option value="Esportes"></option>
-      <option value="Indie"></option>
-      <option value="Corrida"></option>
-      <option value="Dashboard"></option>
-      <option value="App"></option>
-      <option value="Emulador"></option>
-      <option value="Utilitário"></option>
-      <option value="Estratégia"></option>
-      <option value="Puzzle"></option>
-      <option value="Simulação"></option>
-      <option value="Música"></option>
-    </datalist>
+    <div class="pair"><label>Identificador<input name="slug" maxlength="40" pattern="[a-z0-9\-]+" placeholder="meu-jogo" required></label><label>Categoria<select name="genre" required>
+      <option value="">Selecione...</option>
+      <option>Ação</option>
+      <option>Aventura</option>
+      <option>RPG</option>
+      <option>Terror</option>
+      <option>Esportes</option>
+      <option>Indie</option>
+      <option>Corrida</option>
+      <option>Dashboard</option>
+      <option>App</option>
+      <option>Emulador</option>
+      <option>Utilitário</option>
+      <option>Estratégia</option>
+      <option>Puzzle</option>
+      <option>Simulação</option>
+      <option>Música</option>
+    </select></label></div>
     <label>Descrição<textarea name="description" rows="2" maxlength="320" required></textarea></label>
     <div class="image-current" id="current-cover" hidden><span>Capa atual</span><img id="current-cover-img" alt="Capa atual"><label class="check"><input type="checkbox" name="removeCover"> Remover capa</label></div>
     <div class="image-current" id="current-background" hidden><span>Fundo atual</span><img id="current-background-img" alt="Fundo atual"><label class="check"><input type="checkbox" name="removeBackground"> Remover fundo</label></div>
@@ -148,11 +148,9 @@
   <input type="hidden" name="source" value="url">
   <div class="stack" id="url-source">
     <label>Link público do arquivo/pasta no Google Drive (ou URL HTTPS direta)<input name="externalUrl" type="url" placeholder="https://drive.google.com/... ou https://..." required></label>
-    <details class="hint"><summary style="cursor:pointer">Avançado: SHA-256 e tamanho (preenchido automaticamente)</summary>
-      <div class="pair" style="margin-top:8px"><label>SHA-256<input name="externalSha" placeholder="Calculado automaticamente"></label><label>Tamanho em bytes<input name="externalSize" type="number" min="1" placeholder="Calculado automaticamente"></label></div>
-      <div class="actions"><button class="outline" type="button" id="auto-fill-hash">Calcular SHA-256 e tamanho agora</button></div>
-    </details>
-    <p class="hint">O identificador pode ser alterado ao editar; o jogo antigo é substituído. O SHA-256 e o tamanho são calculados pelo servidor ou pelo navegador. No modo servidor, envie pacotes grandes ao Google Drive e cole o link público; o envio direto de arquivo/pasta fica disponível no modo GitHub.</p>
+    <input type="hidden" name="externalSha" value="">
+    <input type="hidden" name="externalSize" value="">
+    <p class="hint">Cole o link público e publique. A dashboard calcula o SHA-256 e o tamanho automaticamente ao baixar. No modo servidor, envie pacotes grandes ao Google Drive e cole o link público; no modo GitHub, você pode enviar arquivo/pasta.</p>
   </div>
   <p role="status" class="hint" id="publish-result"></p><button class="primary" type="submit" id="publish-submit">Publicar no catálogo</button>
 </form></dialog>

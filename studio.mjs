@@ -801,13 +801,12 @@ publish && (publish.onsubmit = async event => {
       sha = String(form.get('externalSha') || '').trim().toLowerCase()
       size = String(form.get('externalSize') || '').trim()
       if (!sha || !size) {
-        const ok = await autoFillFromUrl()
+        await autoFillFromUrl().catch(() => false)
         sha = String(publish.elements.externalSha?.value || '').trim().toLowerCase()
         size = String(publish.elements.externalSize?.value || '').trim()
-        if (!ok || !sha || !size) throw Error('Não foi possível calcular SHA-256/tamanho automaticamente. Conecte o servidor ou preencha “Avançado” manualmente.')
       }
-      if (!/^[a-f\d]{64}$/i.test(sha)) throw Error('O SHA-256 precisa ter 64 caracteres hexadecimais.')
-      if (!/^\d+$/.test(size) || Number(size) <= 0) throw Error('O tamanho precisa ser um número de bytes maior que zero.')
+      if (sha && !/^[a-f\d]{64}$/i.test(sha)) throw Error('O SHA-256 precisa ter 64 caracteres hexadecimais.')
+      if (size && (!/^\d+$/.test(size) || Number(size) < 0)) throw Error('O tamanho precisa ser um número de bytes válido.')
     }
     const args = {
       slug: String(form.get('slug') || '').trim(),
